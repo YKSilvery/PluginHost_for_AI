@@ -27,19 +27,51 @@
 
 ## 快速开始
 
+**Linux:**
 ```bash
 # 1. 构建
-cd Plugin_host
-mkdir build && cd build
+cd Plugin_host && mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 cmake --build . -j$(nproc)
 
-# 2. 快速测试（一行命令）
+# 2. 快速测试
 xvfb-run -a ./build/HeadlessPluginHost_artefacts/Release/HeadlessPluginHost \
   --plugin path/to/plugin.vst3 --signal sine --frequency 440 --duration 1000
 
 # 3. 批处理模式（推荐 AI 使用）
 xvfb-run -a ./build/HeadlessPluginHost_artefacts/Release/HeadlessPluginHost \
+  --file commands.json
+```
+
+**Windows (PowerShell):**
+```powershell
+# 1. 构建
+cd Plugin_host; mkdir build; cd build
+cmake .. -G "Visual Studio 16 2019" -A x64
+cmake --build . --config Release
+
+# 2. 快速测试
+.\build\HeadlessPluginHost_artefacts\Release\HeadlessPluginHost.exe `
+  --plugin path\to\plugin.vst3 --signal sine --frequency 440 --duration 1000
+
+# 3. 批处理模式（推荐 AI 使用）
+.\build\HeadlessPluginHost_artefacts\Release\HeadlessPluginHost.exe `
+  --file commands.json
+```
+
+**macOS:**
+```bash
+# 1. 构建
+cd Plugin_host && mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake --build . -j$(sysctl -n hw.ncpu)
+
+# 2. 快速测试
+./build/HeadlessPluginHost_artefacts/Release/HeadlessPluginHost \
+  --plugin path/to/plugin.vst3 --signal sine --frequency 440 --duration 1000
+
+# 3. 批处理模式（推荐 AI 使用）
+./build/HeadlessPluginHost_artefacts/Release/HeadlessPluginHost \
   --file commands.json
 ```
 
@@ -56,7 +88,9 @@ xvfb-run -a ./build/HeadlessPluginHost_artefacts/Release/HeadlessPluginHost \
 | CMake | 3.22+ |
 | C++ 标准 | C++17 |
 
-### Linux 依赖安装
+### 各平台依赖安装
+
+#### Linux (Ubuntu / Debian)
 
 ```bash
 sudo apt-get install -y \
@@ -68,33 +102,83 @@ sudo apt-get install -y \
   xvfb
 ```
 
+#### Windows
+
+- **Visual Studio 2019+**（需包含 "C++ 桌面开发" 工作负载）或 Visual Studio Build Tools
+- **CMake 3.22+**（可从 https://cmake.org/download/ 安装，或通过 `winget install Kitware.CMake`）
+- 无需额外系统依赖，Windows SDK 已随 VS 安装
+
+#### macOS
+
+```bash
+xcode-select --install          # 安装 Xcode Command Line Tools
+brew install cmake               # 通过 Homebrew 安装 CMake
+```
+
 ### 编译步骤
+
+#### Linux / macOS
 
 ```bash
 cd Plugin_host
 mkdir -p build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build . -j$(nproc)
+cmake --build . -j$(nproc)        # macOS 用 -j$(sysctl -n hw.ncpu)
 ```
 
-构建产物：
+#### Windows (PowerShell)
 
-| 文件 | 说明 |
-|------|------|
-| `build/HeadlessPluginHost_artefacts/Release/HeadlessPluginHost` | 宿主可执行文件 |
-| `build/TestGainPlugin_artefacts/Release/VST3/Test Gain Plugin.vst3` | 测试效果器插件 |
-| `build/TestSynthPlugin_artefacts/Release/VST3/Test Synth Plugin.vst3` | 测试合成器插件 |
+```powershell
+cd Plugin_host
+mkdir build; cd build
+
+# 方式 A：使用 Visual Studio 生成器（推荐）
+cmake .. -G "Visual Studio 16 2019" -A x64    # VS2019
+# 或: cmake .. -G "Visual Studio 17 2022" -A x64   # VS2022
+cmake --build . --config Release
+
+# 方式 B：使用 Ninja（需先启动 Developer Command Prompt 或 vcvarsall.bat）
+cmake .. -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build .
+```
+
+> **提示**：如果 `cmake` 找不到编译器，请从 "x64 Native Tools Command Prompt for VS" 启动终端，或在 PowerShell 中先运行：
+> ```powershell
+> & "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64
+> ```
+
+### 构建产物
+
+| 平台 | 文件 | 说明 |
+|------|------|------|
+| Linux/macOS | `build/HeadlessPluginHost_artefacts/Release/HeadlessPluginHost` | 宿主可执行文件 |
+| Windows | `build\HeadlessPluginHost_artefacts\Release\HeadlessPluginHost.exe` | 宿主可执行文件 |
+| 全平台 | `build/.../Release/VST3/Test Gain Plugin.vst3` | 测试效果器插件 |
+| 全平台 | `build/.../Release/VST3/Test Synth Plugin.vst3` | 测试合成器插件 |
 
 ---
 
 ## 运行方式
 
-> **重要**：在 Linux 无桌面环境下，必须用 `xvfb-run -a` 包裹执行命令，为 VST3 插件提供虚拟 X 服务器。
+> **Linux 特别说明**：在 Linux 无桌面环境下，必须用 `xvfb-run -a` 包裹执行命令，为 VST3 插件提供虚拟 X 服务器。
+>
+> **Windows / macOS**：直接运行可执行文件即可，不需要任何特殊包装。
 
 ### 模式 1：批处理文件（推荐 AI 使用）
 
+**Linux:**
 ```bash
 xvfb-run -a ./HeadlessPluginHost --file commands.json
+```
+
+**Windows (PowerShell):**
+```powershell
+.\HeadlessPluginHost.exe --file commands.json
+```
+
+**macOS:**
+```bash
+./HeadlessPluginHost --file commands.json
 ```
 
 `commands.json` 是一个 JSON 数组，每个元素是一条命令对象：
@@ -109,15 +193,45 @@ xvfb-run -a ./HeadlessPluginHost --file commands.json
 
 ### 模式 2：标准输入
 
+**Linux:**
 ```bash
 echo '[{"action":"load_plugin","plugin_path":"plugin.vst3"},{"action":"get_plugin_info"}]' | \
   xvfb-run -a ./HeadlessPluginHost --stdin
 ```
 
+**Windows (PowerShell):**
+```powershell
+echo '[{"action":"load_plugin","plugin_path":"plugin.vst3"},{"action":"get_plugin_info"}]' |
+  .\HeadlessPluginHost.exe --stdin
+```
+
+**macOS:**
+```bash
+echo '[{"action":"load_plugin","plugin_path":"plugin.vst3"},{"action":"get_plugin_info"}]' | \
+  ./HeadlessPluginHost --stdin
+```
+
 ### 模式 3：快速单插件测试
 
+**Linux:**
 ```bash
 xvfb-run -a ./HeadlessPluginHost --plugin plugin.vst3 \
+  --signal sine --frequency 1000 --duration 500 \
+  --sample-rate 48000 --block-size 256 \
+  --screenshot /tmp/ui.png
+```
+
+**Windows (PowerShell):**
+```powershell
+.\HeadlessPluginHost.exe --plugin plugin.vst3 `
+  --signal sine --frequency 1000 --duration 500 `
+  --sample-rate 48000 --block-size 256 `
+  --screenshot C:\temp\ui.png
+```
+
+**macOS:**
+```bash
+./HeadlessPluginHost --plugin plugin.vst3 \
   --signal sine --frequency 1000 --duration 500 \
   --sample-rate 48000 --block-size 256 \
   --screenshot /tmp/ui.png
@@ -140,6 +254,11 @@ xvfb-run -a ./HeadlessPluginHost --plugin plugin.vst3 \
 - **stderr** → 诊断日志（`[HeadlessHost] ...`）
 
 AI Agent 应只解析 stdout 的 JSON，忽略 stderr。
+
+> **Windows 提示**：在 PowerShell 中，stderr 输出可能显示为红色错误，这是正常现象。可通过 `2>$null` 抑制 stderr：
+> ```powershell
+> .\HeadlessPluginHost.exe --file commands.json 2>$null
+> ```
 
 ---
 
@@ -795,23 +914,45 @@ Plugin_host/
 
 ## 平台说明
 
-### Linux（主要开发平台）
+### Linux
 
 - 必须使用 `xvfb-run -a` 运行（即使不需要 UI 截图，VST3 插件也可能需要 X11 display）
 - UI 截图通过 X11 `XGetImage` 从虚拟 X 服务器抓取合成像素，**可以正确捕获 XEmbed 子窗口内容**
 - 已内置 X11 Atom 预注册和静默错误处理器，避免无窗口管理器时的 BadAtom 崩溃
+- 崩溃信号处理支持 SIGSEGV / SIGABRT / SIGFPE / SIGBUS
 
-### macOS / Windows
+### Windows
+
+- **已完整测试验证**（MSVC 2019 / CMake 3.22+），所有功能正常
+- 直接运行 `.exe`，不需要虚拟显示服务器
+- UI 截图通过 JUCE 的 `createComponentSnapshot()` 实现，效果良好
+- 崩溃信号处理支持 SIGSEGV / SIGABRT / SIGFPE（Windows 无 SIGBUS）
+- 插件路径支持正斜杠 `/` 和反斜杠 `\`，JSON 中推荐用正斜杠或双反斜杠
+- 构建推荐使用 Visual Studio 生成器，也支持 Ninja
+
+### macOS
 
 - 源码跨平台兼容，无需修改
-- UI 截图在有窗口服务器的平台上会回退到 JUCE 的 `createComponentSnapshot()`
+- UI 截图通过 JUCE 的 `createComponentSnapshot()` 实现
 - 不需要 xvfb
+- 构建使用 Unix Makefiles 或 Xcode 生成器
+
+### 路径说明（跨平台）
+
+| 平台 | 插件路径示例 |
+|------|-------------|
+| Linux | `./build/TestGainPlugin_artefacts/Release/VST3/Test Gain Plugin.vst3` |
+| Windows | `.\build\TestGainPlugin_artefacts\Release\VST3\Test Gain Plugin.vst3` |
+| macOS | `./build/TestGainPlugin_artefacts/Release/VST3/Test Gain Plugin.vst3` |
+
+> **JSON 中的路径**：建议统一使用正斜杠 `/`，在所有平台上都能正确解析。
 
 ### 已知限制
 
 - 同一时刻只能加载一个插件实例
 - UI 截图在 Linux 上需要约 400ms 延迟等待 X 服务器渲染
 - 仅支持 VST3 格式（不支持 AU / LV2 / VST2）
+- Windows 上的截图生成的是通过 JUCE 软件渲染器捕获的图像，可能与插件使用 GPU 加速时的实际显示略有差异
 
 ---
 

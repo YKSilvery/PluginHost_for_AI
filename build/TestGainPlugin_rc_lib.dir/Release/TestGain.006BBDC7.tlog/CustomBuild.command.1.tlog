@@ -1,0 +1,20 @@
+^E:\CODES\PLUGINHOST\PLUGINIHOST_FOR_AI\BUILD\CMAKEFILES\E21D7F5368815A34E02D1A739EA05A74\TESTGAINPLUGIN_RESOURCES.RC.RULE
+setlocal
+JUCE\tools\extras\Build\juceaide\juceaide_artefacts\Custom\juceaide.exe rcfile E:/Codes/PluginHost/PluginiHost_for_AI/build/TestGainPlugin_artefacts/JuceLibraryCode/Info.txt E:/Codes/PluginHost/PluginiHost_for_AI/build/TestGainPlugin_artefacts/JuceLibraryCode/TestGainPlugin_resources.rc
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^E:\CODES\PLUGINHOST\PLUGINIHOST_FOR_AI\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SE:/Codes/PluginHost/PluginiHost_for_AI -BE:/Codes/PluginHost/PluginiHost_for_AI/build --check-stamp-file E:/Codes/PluginHost/PluginiHost_for_AI/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

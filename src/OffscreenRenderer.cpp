@@ -76,6 +76,161 @@ static juce::Image captureX11Window (void* nativeHandle, int w, int h)
 #endif // JUCE_LINUX
 
 // ============================================================================
+//  Windows pixel-capture helper.
+//  VST3 editors on Windows use native HWND child windows for their UI.
+//  JUCE's createComponentSnapshot() uses its software renderer which cannot
+//  see native child window content — it just produces a black image.
+//  We use PrintWindow (with PW_RENDERFULLCONTENT for DWM composited windows)
+//  to capture the actual rendered pixels including all child windows.
+// ============================================================================
+#if JUCE_WINDOWS
+ #include <Windows.h>
+
+ #ifndef PW_RENDERFULLCONTENT
+  #define PW_RENDERFULLCONTENT 0x00000002
+ #endif
+
+/** Recursively call PrintWindow on all child HWNDs into the target HDC,
+ *  so we capture the actual plugin GUI even if it's painted in a child. */
+static void captureChildWindows (HDC hdcTarget, HWND parentHwnd,
+                                 int parentX, int parentY)
+{
+    HWND child = GetWindow (parentHwnd, GW_CHILD);
+    while (child != nullptr)
+    {
+        if (IsWindowVisible (child))
+        {
+            RECT childRect;
+            GetWindowRect (child, &childRect);
+
+            RECT parentRect;
+            GetWindowRect (parentHwnd, &parentRect);
+
+            int relX = childRect.left - parentRect.left;
+            int relY = childRect.top  - parentRect.top;
+            int cw   = childRect.right  - childRect.left;
+            int ch   = childRect.bottom - childRect.top;
+
+            // Create a temp DC for this child
+            HDC hdcChild = CreateCompatibleDC (hdcTarget);
+            HBITMAP hbmChild = CreateCompatibleBitmap (hdcTarget, cw, ch);
+            HGDIOBJ oldBm = SelectObject (hdcChild, hbmChild);
+
+            PrintWindow (child, hdcChild, PW_RENDERFULLCONTENT);
+
+            // Blit child content onto parent DC at the correct offset
+            BitBlt (hdcTarget, parentX + relX, parentY + relY,
+                    cw, ch, hdcChild, 0, 0, SRCCOPY);
+
+            SelectObject (hdcChild, oldBm);
+            DeleteObject (hbmChild);
+            DeleteDC (hdcChild);
+
+            // Recurse into grandchildren
+            captureChildWindows (hdcTarget, child,
+                                parentX + relX, parentY + relY);
+        }
+        child = GetWindow (child, GW_HWNDNEXT);
+    }
+}
+
+/** Capture a Win32 window (HWND) and return it as a JUCE Image.
+ *  Uses PrintWindow to capture the real rendered content including
+ *  child windows used by VST3 plugin editors. */
+static juce::Image captureWin32Window (void* nativeHandle, int w, int h)
+{
+    HWND hwnd = static_cast<HWND> (nativeHandle);
+    if (hwnd == nullptr || !IsWindow (hwnd))
+        return {};
+
+    // Ensure the window is visible and sized
+    ShowWindow (hwnd, SW_SHOWNOACTIVATE);
+    SetWindowPos (hwnd, nullptr, 0, 0, w, h,
+                  SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    UpdateWindow (hwnd);
+
+    // Pump messages to let the window paint itself
+    MSG msg;
+    for (int i = 0; i < 50; ++i)
+    {
+        if (PeekMessage (&msg, nullptr, 0, 0, PM_REMOVE))
+        {
+            TranslateMessage (&msg);
+            DispatchMessage (&msg);
+        }
+    }
+
+    // Allow the plugin editor time to render
+    Sleep (300);
+
+    // Pump again after the sleep
+    for (int i = 0; i < 50; ++i)
+    {
+        if (PeekMessage (&msg, nullptr, 0, 0, PM_REMOVE))
+        {
+            TranslateMessage (&msg);
+            DispatchMessage (&msg);
+        }
+    }
+
+    // Create a memory DC and bitmap
+    HDC hdcScreen = GetDC (nullptr);
+    HDC hdcMem = CreateCompatibleDC (hdcScreen);
+    HBITMAP hBitmap = CreateCompatibleBitmap (hdcScreen, w, h);
+    HGDIOBJ oldBm = SelectObject (hdcMem, hBitmap);
+
+    // First, capture the top-level window
+    // Use PW_RENDERFULLCONTENT for DWM composited content
+    BOOL captured = PrintWindow (hwnd, hdcMem, PW_RENDERFULLCONTENT);
+    if (!captured)
+    {
+        // Fallback: try without PW_RENDERFULLCONTENT
+        PrintWindow (hwnd, hdcMem, 0);
+    }
+
+    // Also capture all child windows (VST3 editors typically render in children)
+    captureChildWindows (hdcMem, hwnd, 0, 0);
+
+    // Read pixels into JUCE Image
+    BITMAPINFOHEADER bmi = {};
+    bmi.biSize        = sizeof (BITMAPINFOHEADER);
+    bmi.biWidth       = w;
+    bmi.biHeight      = -h;  // top-down
+    bmi.biPlanes      = 1;
+    bmi.biBitCount    = 32;
+    bmi.biCompression = BI_RGB;
+
+    std::vector<uint8_t> bits (static_cast<size_t> (w) * h * 4);
+    GetDIBits (hdcMem, hBitmap, 0, static_cast<UINT> (h),
+               bits.data(), reinterpret_cast<BITMAPINFO*> (&bmi), DIB_RGB_COLORS);
+
+    juce::Image image (juce::Image::ARGB, w, h, false);
+    {
+        juce::Image::BitmapData bm (image, juce::Image::BitmapData::writeOnly);
+        for (int y = 0; y < h; ++y)
+        {
+            for (int x = 0; x < w; ++x)
+            {
+                size_t idx = (static_cast<size_t> (y) * w + x) * 4;
+                uint8_t b = bits[idx + 0];
+                uint8_t g = bits[idx + 1];
+                uint8_t r = bits[idx + 2];
+                bm.setPixelColour (x, y, juce::Colour (r, g, b));
+            }
+        }
+    }
+
+    // Cleanup
+    SelectObject (hdcMem, oldBm);
+    DeleteObject (hBitmap);
+    DeleteDC (hdcMem);
+    ReleaseDC (nullptr, hdcScreen);
+
+    return image;
+}
+#endif // JUCE_WINDOWS
+
+// ============================================================================
 // Helper: Ensure a component has a native window peer.
 // Under xvfb this creates a real (but invisible) X11 window.
 // Returns true if *this call* added the peer (caller must remove it later).
@@ -132,10 +287,20 @@ juce::var OffscreenRenderer::captureSnapshot (juce::AudioPluginInstance* plugin,
     {
         image = captureX11Window (peer->getNativeHandle(), width, height);
     }
+   #elif JUCE_WINDOWS
+    // On Windows, VST3 editors use native HWND child windows.
+    // JUCE's createComponentSnapshot() uses the software renderer which
+    // cannot see the content of native child windows — it produces a
+    // black image.  We use PrintWindow + child window enumeration to
+    // capture the actual rendered pixels.
+    if (auto* peer = editor->getPeer())
+    {
+        image = captureWin32Window (peer->getNativeHandle(), width, height);
+    }
    #endif
 
-    // Fallback: use JUCE's software snapshot (works on macOS / Windows
-    // where editors don't use XEmbed).
+    // Fallback: use JUCE's software snapshot (works on macOS
+    // where editors typically use CoreGraphics rendering).
     if (image.isNull())
         image = editor->createComponentSnapshot (
             editor->getLocalBounds(), true, 1.0f);

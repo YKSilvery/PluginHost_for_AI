@@ -20,6 +20,19 @@
 #include <cstring>
 #include <signal.h>
 
+// Windows compatibility
+#if defined(_WIN32)
+ #include <io.h>       // _write
+ #include <fcntl.h>
+ #ifndef STDOUT_FILENO
+  #define STDOUT_FILENO 1
+ #endif
+ #define write _write
+ #ifndef SIGBUS
+  #define SIGBUS 0    // SIGBUS does not exist on Windows
+ #endif
+#endif
+
 // On Linux, we need to suppress X11 BadAtom errors that JUCE triggers
 // when addToDesktop() is called under xvfb (no window manager).
 // JUCE's own error handler is only installed by JUCEApplicationBase,
@@ -82,7 +95,9 @@ static void crashSignalHandler (int sig)
         case SIGSEGV: sigName = "SIGSEGV (Segmentation fault)"; break;
         case SIGABRT: sigName = "SIGABRT (Abort)"; break;
         case SIGFPE:  sigName = "SIGFPE (Floating-point exception)"; break;
+#if !defined(_WIN32)
         case SIGBUS:  sigName = "SIGBUS (Bus error)"; break;
+#endif
         default: break;
     }
 
@@ -93,8 +108,8 @@ static void crashSignalHandler (int sig)
               "\"signal\":%d,\"signal_name\":\"%s\","
               "\"message\":\"Plugin caused a fatal crash\"}\n",
               sig, sigName);
-    // Use write() — async-signal-safe
-    [[maybe_unused]] auto _ = write (STDOUT_FILENO, buf, strlen (buf));
+    // Use write() — async-signal-safe (on Windows mapped to _write)
+    [[maybe_unused]] auto _ = write (STDOUT_FILENO, buf, (unsigned int) strlen (buf));
 
     // Re-raise with default handler to get core dump
     signal (sig, SIG_DFL);
@@ -106,7 +121,9 @@ static void installCrashHandlers()
     signal (SIGSEGV, crashSignalHandler);
     signal (SIGABRT, crashSignalHandler);
     signal (SIGFPE,  crashSignalHandler);
+#if !defined(_WIN32)
     signal (SIGBUS,  crashSignalHandler);
+#endif
 }
 
 // =============================================================================

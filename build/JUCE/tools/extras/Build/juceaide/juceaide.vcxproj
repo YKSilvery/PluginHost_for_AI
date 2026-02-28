@@ -1,0 +1,132 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="16.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Custom|x64">
+      <Configuration>Custom</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{482F6589-EFAC-3E8E-9D8C-0D7EEAEFCC03}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+    <Platform>x64</Platform>
+    <ProjectName>juceaide</ProjectName>
+    <VCProjectUpgraderObjectName>NoUpgrade</VCProjectUpgraderObjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Custom|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>MultiByte</CharacterSet>
+    <PlatformToolset>v142</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <_ProjectFileVersion>10.0.20506.1</_ProjectFileVersion>
+    <OutDir Condition="'$(Configuration)|$(Platform)'=='Custom|x64'">E:\Codes\PluginHost\PluginiHost_for_AI\build\JUCE\tools\extras\Build\juceaide\juceaide_artefacts\Custom\</OutDir>
+    <IntDir Condition="'$(Configuration)|$(Platform)'=='Custom|x64'">juceaide.dir\Custom\</IntDir>
+    <TargetName Condition="'$(Configuration)|$(Platform)'=='Custom|x64'">juceaide</TargetName>
+    <TargetExt Condition="'$(Configuration)|$(Platform)'=='Custom|x64'">.exe</TargetExt>
+    <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Custom|x64'">true</LinkIncremental>
+    <GenerateManifest Condition="'$(Configuration)|$(Platform)'=='Custom|x64'">true</GenerateManifest>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Custom|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>E:\Codes\PluginHost\PluginiHost_for_AI\build\JUCE\tools\extras\Build\juceaide\juceaide_artefacts\JuceLibraryCode;E:\Codes\PluginHost\PluginiHost_for_AI\JUCE\extras\Build;E:\Codes\PluginHost\PluginiHost_for_AI\JUCE\modules;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /bigobj</AdditionalOptions>
+      <AssemblerListingLocation>$(IntDir)</AssemblerListingLocation>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MinimalRebuild></MinimalRebuild>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>Full</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <SupportJustMyCode></SupportJustMyCode>
+      <UseFullPaths>false</UseFullPaths>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;JUCE_STANDALONE_APPLICATION=1;_CONSOLE=1;JUCE_DISABLE_JUCE_VERSION_PRINTING=1;JUCE_USE_CURL=0;JUCE_SILENCE_XCODE_15_LINKER_WARNING=1;JUCE_MODULE_AVAILABLE_juce_build_tools=1;JUCE_MODULE_AVAILABLE_juce_gui_basics=1;JUCE_MODULE_AVAILABLE_juce_graphics=1;JUCE_MODULE_AVAILABLE_juce_events=1;JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1;NDEBUG=1;_NDEBUG=1;JUCE_MODULE_AVAILABLE_juce_core=1;JUCE_MODULE_AVAILABLE_juce_data_structures=1;CMAKE_INTDIR="Custom"</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+      <DebugInformationFormat>
+      </DebugInformationFormat>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+    </ClCompile>
+    <ResourceCompile>
+      <PreprocessorDefinitions>%(PreprocessorDefinitions);WIN32;_WINDOWS;JUCE_STANDALONE_APPLICATION=1;_CONSOLE=1;JUCE_DISABLE_JUCE_VERSION_PRINTING=1;JUCE_USE_CURL=0;JUCE_SILENCE_XCODE_15_LINKER_WARNING=1;JUCE_MODULE_AVAILABLE_juce_build_tools=1;JUCE_MODULE_AVAILABLE_juce_gui_basics=1;JUCE_MODULE_AVAILABLE_juce_graphics=1;JUCE_MODULE_AVAILABLE_juce_events=1;JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1;NDEBUG=1;_NDEBUG=1;JUCE_MODULE_AVAILABLE_juce_core=1;JUCE_MODULE_AVAILABLE_juce_data_structures=1;CMAKE_INTDIR=\"Custom\"</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>E:\Codes\PluginHost\PluginiHost_for_AI\build\JUCE\tools\extras\Build\juceaide\juceaide_artefacts\JuceLibraryCode;E:\Codes\PluginHost\PluginiHost_for_AI\JUCE\extras\Build;E:\Codes\PluginHost\PluginiHost_for_AI\JUCE\modules;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <Midl>
+      <AdditionalIncludeDirectories>E:\Codes\PluginHost\PluginiHost_for_AI\build\JUCE\tools\extras\Build\juceaide\juceaide_artefacts\JuceLibraryCode;E:\Codes\PluginHost\PluginiHost_for_AI\JUCE\extras\Build;E:\Codes\PluginHost\PluginiHost_for_AI\JUCE\modules;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <OutputDirectory>$(ProjectDir)/$(IntDir)</OutputDirectory>
+      <HeaderFileName>%(Filename).h</HeaderFileName>
+      <TypeLibraryName>%(Filename).tlb</TypeLibraryName>
+      <InterfaceIdentifierFileName>%(Filename)_i.c</InterfaceIdentifierFileName>
+      <ProxyFileName>%(Filename)_p.c</ProxyFileName>
+    </Midl>
+    <Link>
+      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>E:/Codes/PluginHost/PluginiHost_for_AI/JUCE/extras/Build/juce_build_tools/libs/VisualStudio2019/x64/MT;E:/Codes/PluginHost/PluginiHost_for_AI/JUCE/extras/Build/juce_build_tools/libs/VisualStudio2019/x64/MT/$(Configuration);E:/Codes/PluginHost/PluginiHost_for_AI/JUCE/modules/juce_gui_basics/libs/VisualStudio2019/x64/MT;E:/Codes/PluginHost/PluginiHost_for_AI/JUCE/modules/juce_gui_basics/libs/VisualStudio2019/x64/MT/$(Configuration);E:/Codes/PluginHost/PluginiHost_for_AI/JUCE/modules/juce_graphics/libs/VisualStudio2019/x64/MT;E:/Codes/PluginHost/PluginiHost_for_AI/JUCE/modules/juce_graphics/libs/VisualStudio2019/x64/MT/$(Configuration);E:/Codes/PluginHost/PluginiHost_for_AI/JUCE/modules/juce_events/libs/VisualStudio2019/x64/MT;E:/Codes/PluginHost/PluginiHost_for_AI/JUCE/modules/juce_events/libs/VisualStudio2019/x64/MT/$(Configuration);E:/Codes/PluginHost/PluginiHost_for_AI/JUCE/modules/juce_core/libs/VisualStudio2019/x64/MT;E:/Codes/PluginHost/PluginiHost_for_AI/JUCE/modules/juce_core/libs/VisualStudio2019/x64/MT/$(Configuration);E:/Codes/PluginHost/PluginiHost_for_AI/JUCE/modules/juce_data_structures/libs/VisualStudio2019/x64/MT;E:/Codes/PluginHost/PluginiHost_for_AI/JUCE/modules/juce_data_structures/libs/VisualStudio2019/x64/MT/$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>E:/Codes/PluginHost/PluginiHost_for_AI/build/JUCE/tools/extras/Build/juceaide/juceaide_artefacts/Custom/juceaide.lib</ImportLibrary>
+      <ProgramDataBaseFile>E:/Codes/PluginHost/PluginiHost_for_AI/build/JUCE/tools/extras/Build/juceaide/juceaide_artefacts/Custom/juceaide.pdb</ProgramDataBaseFile>
+      <SubSystem>Console</SubSystem>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CustomBuild Include="E:\Codes\PluginHost\PluginiHost_for_AI\JUCE\extras\Build\juceaide\CMakeLists.txt">
+      <UseUtf8Encoding>Always</UseUtf8Encoding>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Custom|x64'">Building Custom Rule E:/Codes/PluginHost/PluginiHost_for_AI/JUCE/extras/Build/juceaide/CMakeLists.txt</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Custom|x64'">setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SE:/Codes/PluginHost/PluginiHost_for_AI/JUCE -BE:/Codes/PluginHost/PluginiHost_for_AI/build/JUCE/tools --check-stamp-file E:/Codes/PluginHost/PluginiHost_for_AI/build/JUCE/tools/extras/Build/juceaide/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal &amp; call :cmErrorLevel %errorlevel% &amp; goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd</Command>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Custom|x64'">E:\Codes\PluginHost\PluginiHost_for_AI\build\JUCE\tools\CMakeFiles\cmake.verify_globs;%(AdditionalInputs)</AdditionalInputs>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Custom|x64'">E:\Codes\PluginHost\PluginiHost_for_AI\build\JUCE\tools\extras\Build\juceaide\CMakeFiles\generate.stamp</Outputs>
+      <LinkObjects Condition="'$(Configuration)|$(Platform)'=='Custom|x64'">false</LinkObjects>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="E:\Codes\PluginHost\PluginiHost_for_AI\JUCE\extras\Build\juceaide\Main.cpp" />
+    <ClCompile Include="E:\Codes\PluginHost\PluginiHost_for_AI\JUCE\extras\Build\juce_build_tools\juce_build_tools.cpp" />
+    <ClCompile Include="E:\Codes\PluginHost\PluginiHost_for_AI\JUCE\modules\juce_gui_basics\juce_gui_basics.cpp" />
+    <ClCompile Include="E:\Codes\PluginHost\PluginiHost_for_AI\JUCE\modules\juce_graphics\juce_graphics.cpp" />
+    <ClCompile Include="E:\Codes\PluginHost\PluginiHost_for_AI\JUCE\modules\juce_graphics\juce_graphics_Harfbuzz.cpp" />
+    <ClCompile Include="E:\Codes\PluginHost\PluginiHost_for_AI\JUCE\modules\juce_graphics\juce_graphics_Sheenbidi.c" />
+    <ClCompile Include="E:\Codes\PluginHost\PluginiHost_for_AI\JUCE\modules\juce_events\juce_events.cpp" />
+    <ClCompile Include="E:\Codes\PluginHost\PluginiHost_for_AI\JUCE\modules\juce_core\juce_core.cpp" />
+    <ClCompile Include="E:\Codes\PluginHost\PluginiHost_for_AI\JUCE\modules\juce_core\juce_core_CompilationTime.cpp" />
+    <ClCompile Include="E:\Codes\PluginHost\PluginiHost_for_AI\JUCE\modules\juce_data_structures\juce_data_structures.cpp" />
+  </ItemGroup>
+  <ItemGroup />
+  <ItemGroup>
+    <ProjectReference Include="E:\Codes\PluginHost\PluginiHost_for_AI\build\JUCE\tools\ZERO_CHECK.vcxproj">
+      <Project>{BBB75DDB-0EAE-3E54-B766-9FFA25E6AE75}</Project>
+      <Name>ZERO_CHECK</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

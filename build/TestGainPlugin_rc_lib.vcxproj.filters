@@ -1,0 +1,22 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="16.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="E:\Codes\PluginHost\PluginiHost_for_AI\build\CMakeFiles\e21d7f5368815a34e02d1a739ea05a74\TestGainPlugin_resources.rc.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="E:\Codes\PluginHost\PluginiHost_for_AI\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="E:\Codes\PluginHost\PluginiHost_for_AI\build\TestGainPlugin_artefacts\JuceLibraryCode\TestGainPlugin_resources.rc">
+      <Filter>Source Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{EAB1E45A-EB88-3015-9F4E-B22E107E03E6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{904F639F-D72C-3C56-BCAF-1FD808FF091E}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

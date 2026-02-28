@@ -17,6 +17,7 @@ verify_screenshots.py — 验证 HeadlessPluginHost 的 UI 截图功能是否已
 
 import json
 import os
+import platform
 import struct
 import subprocess
 import sys
@@ -182,8 +183,11 @@ def judge(metrics: dict) -> tuple:
 # ============================================================================
 def main():
     project_dir = os.path.dirname(os.path.abspath(__file__))
+    is_windows = platform.system() == "Windows"
+
+    host_name = "HeadlessPluginHost.exe" if is_windows else "HeadlessPluginHost"
     host_bin = os.path.join(
-        project_dir, "build", "HeadlessPluginHost_artefacts", "Release", "HeadlessPluginHost"
+        project_dir, "build", "HeadlessPluginHost_artefacts", "Release", host_name
     )
 
     effect_vst = os.path.join(
@@ -212,14 +216,19 @@ def main():
         with open(cmd_file, "w") as f:
             json.dump(commands, f)
 
-        # Run the host under xvfb-run
+        # Run the host (use xvfb-run on Linux, direct execution on Windows/macOS)
         print("=" * 60)
         print("  HeadlessPluginHost 截图验证脚本")
         print("=" * 60)
         print(f"\n[1/3] 运行 host 生成截图 ...")
 
+        if is_windows or platform.system() == "Darwin":
+            run_cmd = [host_bin, "--file", cmd_file]
+        else:
+            run_cmd = ["xvfb-run", "-a", host_bin, "--file", cmd_file]
+
         result = subprocess.run(
-            ["xvfb-run", "-a", host_bin, "--file", cmd_file],
+            run_cmd,
             capture_output=True, text=True, cwd=project_dir, timeout=60
         )
 

@@ -1,0 +1,10 @@
+^E:\CODES\PLUGINHOST\PLUGINIHOST_FOR_AI\BUILD\CMAKEFILES\8B7045BF9FE124CD0E128C8E663ED711\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SE:/Codes/PluginHost/PluginiHost_for_AI -BE:/Codes/PluginHost/PluginiHost_for_AI/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file E:/Codes/PluginHost/PluginiHost_for_AI/build/HeadlessPluginHost.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
