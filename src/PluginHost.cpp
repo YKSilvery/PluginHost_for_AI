@@ -384,9 +384,12 @@ juce::var PluginHost::openEditor()
     if (activeEditor == nullptr)
         return makeError ("open_editor", "createEditor() returned nullptr");
 
-    // Give it a size and let it initialize
-    activeEditor->setSize (activeEditor->getWidth(), activeEditor->getHeight());
-    juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+    // Give the editor a native window peer so all child components can
+    // render correctly (required under headless X / xvfb).
+    activeEditor->addToDesktop (juce::ComponentPeer::windowIsTemporary);
+    activeEditor->setVisible (true);
+    activeEditor->setBounds (0, 0, activeEditor->getWidth(), activeEditor->getHeight());
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
 
     auto endTime = std::chrono::steady_clock::now();
     double elapsedMs = std::chrono::duration<double, std::milli> (endTime - startTime).count();
@@ -410,6 +413,10 @@ juce::var PluginHost::closeEditor()
     }
 
     auto startTime = std::chrono::steady_clock::now();
+
+    // Remove from desktop before destroying to avoid dangling peer references
+    if (activeEditor->isOnDesktop())
+        activeEditor->removeFromDesktop();
 
     activeEditor.reset();
 

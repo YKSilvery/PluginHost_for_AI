@@ -786,4 +786,7 @@ CMakeFiles/HeadlessPluginHost.dir/src/OffscreenRenderer.cpp.o: \
  /home/yksilvery/Plugin_host/JUCE/modules/juce_audio_processors/utilities/juce_ParameterAttachments.h \
  /home/yksilvery/Plugin_host/JUCE/modules/juce_audio_processors/utilities/juce_AudioProcessorValueTreeState.h \
  /home/yksilvery/Plugin_host/JUCE/modules/juce_audio_processors/utilities/juce_PluginHostType.h \
- /home/yksilvery/Plugin_host/src/JsonHelper.h
+ /home/yksilvery/Plugin_host/src/JsonHelper.h /usr/include/X11/Xlib.h \
+ /usr/include/X11/X.h /usr/include/X11/Xfuncproto.h \
+ /usr/include/X11/Xosdefs.h /usr/include/X11/Xutil.h \
+ /usr/include/X11/keysym.h /usr/include/X11/keysymdef.h

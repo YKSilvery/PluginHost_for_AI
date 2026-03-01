@@ -20,6 +20,50 @@
 #include <cstring>
 #include <signal.h>
 
+// On Linux, we need to suppress X11 BadAtom errors that JUCE triggers
+// when addToDesktop() is called under xvfb (no window manager).
+// JUCE's own error handler is only installed by JUCEApplicationBase,
+// which console apps don't use.
+#if JUCE_LINUX
+ #include <X11/Xlib.h>
+ #include <X11/Xatom.h>
+
+ static int suppressedXErrors = 0;
+
+ static int silentX11ErrorHandler (Display*, XErrorEvent*)
+ {
+     ++suppressedXErrors;
+     return 0;  // non-fatal — continue execution
+ }
+
+ /** Pre-intern all WM atoms that JUCE expects, so XInternAtom(..., True)
+  *  won't return None=0 later.  X atoms are server-global. */
+ static void preInternX11Atoms()
+ {
+     Display* dpy = XOpenDisplay (nullptr);
+     if (dpy == nullptr) return;
+
+     // These are the atoms JUCE interns with only_if_exists=True
+     const char* names[] = {
+         "WM_PROTOCOLS", "WM_DELETE_WINDOW", "WM_TAKE_FOCUS",
+         "_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_NORMAL",
+         "_NET_WM_WINDOW_TYPE_COMBO", "_NET_WM_WINDOW_TYPE_TOOLTIP",
+         "_NET_WM_WINDOW_TYPE_NOTIFICATION", "_NET_WM_WINDOW_TYPE_DIALOG",
+         "_NET_WM_PID", "_NET_WM_STATE", "_NET_WM_STATE_FOCUSED",
+         "_NET_ACTIVE_WINDOW", "_NET_WM_NAME", "UTF8_STRING",
+         "_NET_FRAME_EXTENTS", "_NET_WM_WINDOW_OPACITY",
+         "WM_CHANGE_STATE", "_NET_WM_STATE_MAXIMIZED_VERT",
+         "_NET_WM_STATE_MAXIMIZED_HORZ", "_NET_WM_STATE_HIDDEN",
+     };
+
+     for (auto* name : names)
+         XInternAtom (dpy, name, False);   // False = create if missing
+
+     XFlush (dpy);
+     XCloseDisplay (dpy);
+ }
+#endif
+
 // =============================================================================
 // Global crash handler for plugin-induced crashes
 // =============================================================================
@@ -181,6 +225,15 @@ int main (int argc, char* argv[])
 {
     // Install crash handlers FIRST
     installCrashHandlers();
+
+#if JUCE_LINUX
+    // Pre-intern X11 atoms and install a silent error handler.
+    // Without this, addToDesktop() under xvfb triggers BadAtom (atom=0)
+    // because JUCE uses XInternAtom(..., True) which returns None when
+    // no window manager has registered the standard WM atoms.
+    preInternX11Atoms();
+    XSetErrorHandler (silentX11ErrorHandler);
+#endif
 
     // Initialize JUCE (message manager, etc.)
     juce::ScopedJuceInitialiser_GUI juceInit;

@@ -12219,7 +12219,12 @@ CMakeFiles/HeadlessPluginHost.dir/src/Main.cpp.o: ../src/Main.cpp \
   ../JUCE/modules/juce_dsp/widgets/juce_Phaser.h \
   ../JUCE/modules/juce_dsp/widgets/juce_Chorus.h \
   ../src/OffscreenRenderer.h \
-  ../src/JsonHelper.h
+  ../src/JsonHelper.h \
+  /usr/include/X11/Xlib.h \
+  /usr/include/X11/X.h \
+  /usr/include/X11/Xfuncproto.h \
+  /usr/include/X11/Xosdefs.h \
+  /usr/include/X11/Xatom.h
 
 CMakeFiles/HeadlessPluginHost.dir/src/OffscreenRenderer.cpp.o: ../src/OffscreenRenderer.cpp \
   /usr/include/stdc-predef.h \
@@ -13079,7 +13084,14 @@ CMakeFiles/HeadlessPluginHost.dir/src/OffscreenRenderer.cpp.o: ../src/OffscreenR
   ../JUCE/modules/juce_audio_processors/utilities/juce_ParameterAttachments.h \
   ../JUCE/modules/juce_audio_processors/utilities/juce_AudioProcessorValueTreeState.h \
   ../JUCE/modules/juce_audio_processors/utilities/juce_PluginHostType.h \
-  ../src/JsonHelper.h
+  ../src/JsonHelper.h \
+  /usr/include/X11/Xlib.h \
+  /usr/include/X11/X.h \
+  /usr/include/X11/Xfuncproto.h \
+  /usr/include/X11/Xosdefs.h \
+  /usr/include/X11/Xutil.h \
+  /usr/include/X11/keysym.h \
+  /usr/include/X11/keysymdef.h
 
 CMakeFiles/HeadlessPluginHost.dir/src/PluginHost.cpp.o: ../src/PluginHost.cpp \
   /usr/include/stdc-predef.h \

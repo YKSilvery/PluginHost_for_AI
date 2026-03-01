@@ -428,6 +428,10 @@ HeadlessPluginHost_artefacts/Release/HeadlessPluginHost: CMakeFiles/HeadlessPlug
 HeadlessPluginHost_artefacts/Release/HeadlessPluginHost: CMakeFiles/HeadlessPluginHost.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.cpp.o
 HeadlessPluginHost_artefacts/Release/HeadlessPluginHost: CMakeFiles/HeadlessPluginHost.dir/JUCE/modules/juce_dsp/juce_dsp.cpp.o
 HeadlessPluginHost_artefacts/Release/HeadlessPluginHost: CMakeFiles/HeadlessPluginHost.dir/build.make
+HeadlessPluginHost_artefacts/Release/HeadlessPluginHost: /usr/lib/x86_64-linux-gnu/libSM.so
+HeadlessPluginHost_artefacts/Release/HeadlessPluginHost: /usr/lib/x86_64-linux-gnu/libICE.so
+HeadlessPluginHost_artefacts/Release/HeadlessPluginHost: /usr/lib/x86_64-linux-gnu/libX11.so
+HeadlessPluginHost_artefacts/Release/HeadlessPluginHost: /usr/lib/x86_64-linux-gnu/libXext.so
 HeadlessPluginHost_artefacts/Release/HeadlessPluginHost: /usr/lib/x86_64-linux-gnu/libfontconfig.so
 HeadlessPluginHost_artefacts/Release/HeadlessPluginHost: /usr/lib/x86_64-linux-gnu/libfreetype.so
 HeadlessPluginHost_artefacts/Release/HeadlessPluginHost: CMakeFiles/HeadlessPluginHost.dir/link.txt

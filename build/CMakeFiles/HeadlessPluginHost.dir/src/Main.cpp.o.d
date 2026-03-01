@@ -940,4 +940,6 @@ CMakeFiles/HeadlessPluginHost.dir/src/Main.cpp.o: \
  /home/yksilvery/Plugin_host/JUCE/modules/juce_dsp/widgets/juce_Phaser.h \
  /home/yksilvery/Plugin_host/JUCE/modules/juce_dsp/widgets/juce_Chorus.h \
  /home/yksilvery/Plugin_host/src/OffscreenRenderer.h \
- /home/yksilvery/Plugin_host/src/JsonHelper.h
+ /home/yksilvery/Plugin_host/src/JsonHelper.h /usr/include/X11/Xlib.h \
+ /usr/include/X11/X.h /usr/include/X11/Xfuncproto.h \
+ /usr/include/X11/Xosdefs.h /usr/include/X11/Xatom.h

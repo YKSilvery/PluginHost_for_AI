@@ -1,6 +1,94 @@
 #include "OffscreenRenderer.h"
 #include "JsonHelper.h"
 
+#if JUCE_LINUX
+ #include <X11/Xlib.h>
+ #include <X11/Xutil.h>
+ #include <unistd.h>    // usleep
+
+// ============================================================================
+//  X11 pixel-capture helper.
+//  VST3 editors on Linux use XEmbed — the actual plugin UI lives in a child
+//  X window that JUCE's software renderer cannot see.  The only reliable way
+//  to grab the rendered pixels is through XGetImage on the root window.
+// ============================================================================
+
+/** Capture a region of the root window and return it as a JUCE Image. */
+static juce::Image captureX11Window (void* nativeHandle, int w, int h)
+{
+    Display* dpy = XOpenDisplay (nullptr);
+    if (dpy == nullptr)
+        return {};
+
+    Window xwin = (Window) nativeHandle;
+
+    // Make sure the window is mapped and sized correctly
+    XMapRaised (dpy, xwin);
+    XMoveResizeWindow (dpy, xwin, 0, 0,
+                       static_cast<unsigned int> (w),
+                       static_cast<unsigned int> (h));
+    XSync (dpy, False);
+
+    // Give X server time to composite all child windows (XEmbed).
+    // usleep is more reliable than JUCE message-loop here because
+    // the rendering happens in the X server, not in our event loop.
+    usleep (400000);  // 400 ms
+    XSync (dpy, False);
+
+    // Translate to root coordinates
+    Window root = DefaultRootWindow (dpy);
+    int rx = 0, ry = 0;
+    Window childRet;
+    XTranslateCoordinates (dpy, xwin, root, 0, 0, &rx, &ry, &childRet);
+
+    // Grab from root window — this composites all overlapping child windows
+    XImage* ximg = XGetImage (dpy, root, rx, ry,
+                              static_cast<unsigned int> (w),
+                              static_cast<unsigned int> (h),
+                              AllPlanes, ZPixmap);
+    if (ximg == nullptr)
+    {
+        XCloseDisplay (dpy);
+        return {};
+    }
+
+    // Convert to JUCE Image
+    juce::Image image (juce::Image::ARGB, w, h, false);
+    {
+        juce::Image::BitmapData bm (image, juce::Image::BitmapData::writeOnly);
+        for (int y = 0; y < h; ++y)
+        {
+            for (int x = 0; x < w; ++x)
+            {
+                unsigned long px = XGetPixel (ximg, x, y);
+                auto r = static_cast<uint8_t> ((px >> 16) & 0xFF);
+                auto g = static_cast<uint8_t> ((px >>  8) & 0xFF);
+                auto b = static_cast<uint8_t> ((px      ) & 0xFF);
+                bm.setPixelColour (x, y, juce::Colour (r, g, b));
+            }
+        }
+    }
+
+    XDestroyImage (ximg);
+    XCloseDisplay (dpy);
+    return image;
+}
+#endif // JUCE_LINUX
+
+// ============================================================================
+// Helper: Ensure a component has a native window peer.
+// Under xvfb this creates a real (but invisible) X11 window.
+// Returns true if *this call* added the peer (caller must remove it later).
+static bool ensureOnDesktop (juce::Component* comp)
+{
+    if (comp == nullptr) return false;
+    if (comp->isOnDesktop())  return false;
+
+    comp->addToDesktop (juce::ComponentPeer::windowIsTemporary);
+    comp->setVisible (true);
+    return true;
+}
+
 // ============================================================================
 juce::var OffscreenRenderer::captureSnapshot (juce::AudioPluginInstance* plugin,
                                               const juce::String& outputPath,
@@ -25,19 +113,39 @@ juce::var OffscreenRenderer::captureSnapshot (juce::AudioPluginInstance* plugin,
     if (editor == nullptr)
         return makeError ("capture_ui", "Failed to create plugin editor");
 
-    // Set the size (triggers resized())
-    editor->setSize (width, height);
+    // Ensure the editor has a native window peer.
+    bool weAddedPeer = ensureOnDesktop (editor);
 
-    // Let any async operations complete
-    juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
+    // Resize and let the component hierarchy lay out.
+    editor->setBounds (0, 0, width, height);
+    editor->repaint();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
 
-    // Offscreen render to Image
-    juce::Image image (juce::Image::ARGB, width, height, true);
+    juce::Image image;
+
+   #if JUCE_LINUX
+    // On Linux, VST3 editors use XEmbed — the actual UI lives in a child
+    // X11 window.  JUCE's createComponentSnapshot() only captures the
+    // wrapper's gray background, not the plugin's actual content.
+    // We must go through the X server to grab the composited pixels.
+    if (auto* peer = editor->getPeer())
     {
-        juce::Graphics g (image);
-        g.fillAll (juce::Colours::black);
-        editor->paintEntireComponent (g, true);
+        image = captureX11Window (peer->getNativeHandle(), width, height);
     }
+   #endif
+
+    // Fallback: use JUCE's software snapshot (works on macOS / Windows
+    // where editors don't use XEmbed).
+    if (image.isNull())
+        image = editor->createComponentSnapshot (
+            editor->getLocalBounds(), true, 1.0f);
+
+    // Tear down the peer if we created it
+    if (weAddedPeer)
+        editor->removeFromDesktop();
+
+    if (image.isNull())
+        return makeError ("capture_ui", "Failed to capture plugin UI image");
 
     // Save as PNG
     juce::File outFile (outputPath);
@@ -56,8 +164,8 @@ juce::var OffscreenRenderer::captureSnapshot (juce::AudioPluginInstance* plugin,
 
     auto data = makeObject();
     set (data, "output_path",  outFile.getFullPathName());
-    set (data, "width",        width);
-    set (data, "height",       height);
+    set (data, "width",        image.getWidth());
+    set (data, "height",       image.getHeight());
     set (data, "file_size_bytes", static_cast<int> (outFile.getSize()));
     return makeSuccess ("capture_ui", data);
 }
@@ -85,8 +193,11 @@ juce::var OffscreenRenderer::getParameterLayout (juce::AudioPluginInstance* plug
     if (editor == nullptr)
         return makeError ("get_parameter_layout", "Failed to create plugin editor");
 
-    editor->setSize (width, height);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
+    // Ensure native peer exists for correct layout measurement
+    bool weAddedPeer = ensureOnDesktop (editor);
+
+    editor->setBounds (0, 0, width, height);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (300);
 
     auto data = makeObject();
     set (data, "editor_width",  editor->getWidth());
@@ -111,6 +222,9 @@ juce::var OffscreenRenderer::getParameterLayout (juce::AudioPluginInstance* plug
         append (paramsArr, pObj);
     }
     set (data, "parameters", paramsArr);
+
+    if (weAddedPeer)
+        editor->removeFromDesktop();
 
     return makeSuccess ("get_parameter_layout", data);
 }

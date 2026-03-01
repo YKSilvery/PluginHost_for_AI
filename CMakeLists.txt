@@ -8,6 +8,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Add JUCE framework
 add_subdirectory(JUCE)
 
+# On Linux we need X11 for the xvfb atom pre-interning workaround
+if(UNIX AND NOT APPLE)
+    find_package(X11 REQUIRED)
+endif()
+
 # ==============================================================================
 #  Headless VST3 Host Tool
 # ==============================================================================
@@ -41,9 +46,15 @@ target_link_libraries(HeadlessPluginHost
         juce::juce_audio_processors
         juce::juce_audio_formats
         juce::juce_dsp
+        $<$<PLATFORM_ID:Linux>:X11>
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)
+
+if(X11_FOUND)
+    target_include_directories(HeadlessPluginHost PRIVATE ${X11_INCLUDE_DIR})
+    target_link_libraries(HeadlessPluginHost PRIVATE ${X11_LIBRARIES})
+endif()
 
 # ==============================================================================
 #  Test Plugin (VST3) — simple gain/tone plugin for validation
