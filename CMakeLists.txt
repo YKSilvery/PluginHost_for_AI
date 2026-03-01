@@ -19,7 +19,7 @@ endif()
 juce_add_console_app(HeadlessPluginHost
     PRODUCT_NAME "Headless Plugin Host"
     COMPANY_NAME "AIDebugTools"
-    VERSION "1.0.0")
+    VERSION "1.1.0")
 
 target_sources(HeadlessPluginHost PRIVATE
     src/Main.cpp
