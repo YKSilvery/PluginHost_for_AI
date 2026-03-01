@@ -1,0 +1,93 @@
+{
+    "commands": [
+        {
+            "action": "load_plugin",
+            "plugin_path": "./build/TestGainPlugin_artefacts/Release/VST3/Test Gain Plugin.vst3",
+            "sample_rate": 44100.0,
+            "block_size": 512
+        },
+        {
+            "action": "list_parameters"
+        },
+        {
+            "action": "set_parameter",
+            "parameter_id": "gain",
+            "value": 0.833
+        },
+        {
+            "action": "set_parameter",
+            "parameter_id": "mix",
+            "value": 0.5
+        },
+        {
+            "action": "set_parameter",
+            "parameter_id": "frequency",
+            "value": 0.5
+        },
+        {
+            "action": "generate_and_process",
+            "signal_type": "impulse",
+            "duration_ms": 100,
+            "amplitude": 1.0
+        },
+        {
+            "action": "analyze_output",
+            "include_spectrum": false,
+            "fft_order": 12,
+            "max_peaks": 5
+        },
+        {
+            "action": "generate_and_process",
+            "signal_type": "sine",
+            "frequency": 1000.0,
+            "duration_ms": 500,
+            "amplitude": 0.8
+        },
+        {
+            "action": "analyze_output",
+            "include_spectrum": false,
+            "fft_order": 12,
+            "max_peaks": 5
+        },
+        {
+            "action": "generate_and_process",
+            "signal_type": "sine_sweep",
+            "start_freq": 20.0,
+            "end_freq": 20000.0,
+            "duration_ms": 1000,
+            "amplitude": 0.8
+        },
+        {
+            "action": "analyze_output",
+            "include_spectrum": false,
+            "fft_order": 12,
+            "max_peaks": 10
+        },
+        {
+            "action": "generate_and_process",
+            "signal_type": "white_noise",
+            "duration_ms": 500,
+            "amplitude": 0.5
+        },
+        {
+            "action": "analyze_output",
+            "include_spectrum": false,
+            "fft_order": 12,
+            "max_peaks": 5
+        },
+        {
+            "action": "capture_ui",
+            "output_path": "./build/test_screenshot.png",
+            "width": 500,
+            "height": 350
+        },
+        {
+            "action": "get_parameter_layout",
+            "width": 500,
+            "height": 350
+        },
+        {
+            "action": "unload_plugin"
+        }
+    ]
+}

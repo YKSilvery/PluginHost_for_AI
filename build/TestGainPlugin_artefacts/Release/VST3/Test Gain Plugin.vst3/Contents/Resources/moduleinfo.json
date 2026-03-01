@@ -1,0 +1,46 @@
+{
+  "Name": "Test Gain Plugin",
+  "Version": "1.0.0",
+  "Factory Info": {
+    "Vendor": "AIDebugTools",
+    "URL": "",
+    "E-Mail": "",
+    "Flags": {
+      "Unicode": true,
+      "Classes Discardable": false,
+      "Component Non Discardable": false,
+    },
+  },
+  "Classes": [
+    {
+      "CID": "ABCDEF019182FAEB4169446254477031",
+      "Category": "Audio Module Class",
+      "Name": "Test Gain Plugin",
+      "Vendor": "AIDebugTools",
+      "Version": "1.0.0",
+      "SDKVersion": "VST 3.8.0",
+      "Sub Categories": [
+        "Fx",
+      ],
+      "Class Flags": 0,
+      "Cardinality": 2147483647,
+      "Snapshots": [
+      ],
+    },
+    {
+      "CID": "ABCDEF011234ABCD4169446254477031",
+      "Category": "Component Controller Class",
+      "Name": "Test Gain Plugin",
+      "Vendor": "AIDebugTools",
+      "Version": "1.0.0",
+      "SDKVersion": "VST 3.8.0",
+      "Sub Categories": [
+        "Fx",
+      ],
+      "Class Flags": 0,
+      "Cardinality": 2147483647,
+      "Snapshots": [
+      ],
+    },
+  ],
+}
