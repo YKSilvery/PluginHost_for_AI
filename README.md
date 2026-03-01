@@ -17,6 +17,7 @@
   - [MIDI / 合成器](#4-midi--合成器)
   - [UI 截图与布局](#5-ui-截图与布局)
   - [生命周期压力测试](#6-生命周期压力测试)
+  - [高级分析 (v1.1)](#7-高级分析-v11)
 - [输出格式](#输出格式)
 - [信号类型一览](#信号类型一览)
 - [典型 AI 工作流示例](#典型-ai-工作流示例)
@@ -738,13 +739,167 @@ AI Agent 应只解析 stdout 的 JSON，忽略 stderr。
 
 ---
 
+### 7. 高级分析 (v1.1)
+
+> 以下三个命令需要先执行 `generate_and_process`、`render_synth_note` 或 `send_midi_and_process` 产生输出缓冲区。
+
+#### `analyze_stft` — 短时傅里叶变换（时频联合分析）
+
+```json
+{
+  "action": "analyze_stft",
+  "fft_order": 11,
+  "hop_size": 512,
+  "channel": 0,
+  "include_spectrogram": false,
+  "max_frames": 200
+}
+```
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `fft_order` | number | 11 | FFT 阶数 (8~14, 即 256~16384 点) |
+| `hop_size` | number | 512 | 帧移（采样点数） |
+| `channel` | number | 0 | 分析的通道索引 |
+| `include_spectrogram` | bool | false | 是否包含完整频谱矩阵（数据量大） |
+| `max_frames` | number | 200 | 输出的最大帧数（自动降采样） |
+
+**返回数据**：
+
+```json
+{
+  "stft": {
+    "fft_size": 2048,
+    "hop_size": 512,
+    "num_frames": 40,
+    "num_bins": 1025,
+    "frequency_resolution": 21.53,
+    "time_resolution_sec": 0.0116,
+    "energy_low_db": -78.27,
+    "energy_mid_db": -28.55,
+    "energy_high_db": -163.71,
+    "frame_summary": [
+      {"time_sec": 0.023, "peak_magnitude_db": -7.94, "peak_frequency_hz": 430.66}
+    ],
+    "spectrogram_db": [[...], ...]  // 仅当 include_spectrogram=true
+  }
+}
+```
+
+**AI 用途**：
+- 分析信号的时频变化（如扫频信号的频率随时间变化轨迹）
+- 检测插件是否在时间维度上引入异常频率成分
+- 对比处理前后的频谱热力图
+- `energy_low/mid/high_db` 可快速判断频段能量分布
+
+---
+
+#### `analyze_time_domain` — 时域信号分析
+
+```json
+{
+  "action": "analyze_time_domain",
+  "include_samples": true,
+  "max_samples": 10000
+}
+```
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `include_samples` | bool | true | 是否包含波形采样数据 |
+| `max_samples` | number | 10000 | 每通道最大输出采样数（自动降采样） |
+
+**返回数据**：
+
+```json
+{
+  "num_samples": 22050,
+  "num_channels": 2,
+  "sample_rate": 44100.0,
+  "duration_ms": 500.0,
+  "channels": [
+    {
+      "channel": 0,
+      "rms_db": -4.95,
+      "peak_db": -1.94,
+      "dc_offset": 0.0001,
+      "has_nan": false,
+      "has_inf": false,
+      "zero_crossing_rate": 0.0199,
+      "first_nonzero_sample": 1,
+      "latency_ms": 0.023,
+      "samples": [0.0, 0.05, 0.10, ...],
+      "samples_count": 5000
+    }
+  ]
+}
+```
+
+**AI 用途**：
+- 冲激响应分析：导出完整波形用于 LTI 系统特征分析
+- 延迟检测：`first_nonzero_sample` + `latency_ms` 精确测量插件处理延迟
+- 零交叉率判断信号频率特征
+- 直接获取原始波形数据进行自定义分析（如相关性计算、波形对比）
+
+---
+
+#### `analyze_loudness` — 音量包络与响度分析
+
+```json
+{
+  "action": "analyze_loudness",
+  "window_ms": 10.0,
+  "hop_ms": 5.0,
+  "channel": 0,
+  "include_envelope": true,
+  "max_points": 500
+}
+```
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `window_ms` | number | 10.0 | 分析窗口长度 (ms) |
+| `hop_ms` | number | 5.0 | 帧移 (ms) |
+| `channel` | number | 0 | 分析的通道索引 |
+| `include_envelope` | bool | true | 是否包含完整音量包络曲线 |
+| `max_points` | number | 500 | 包络最大输出点数（自动降采样） |
+
+**返回数据**：
+
+```json
+{
+  "loudness": {
+    "num_frames": 99,
+    "window_ms": 10.0,
+    "hop_ms": 5.0,
+    "overall_rms_db": -4.95,
+    "overall_peak_db": -1.94,
+    "dynamic_range_db": 0.18,
+    "crest_factor_db": 3.01,
+    "attack_time_ms": 5.0,
+    "release_time_ms": 0.0,
+    "envelope": [
+      {"time_sec": 0.005, "rms_db": -5.12, "peak_db": -2.30}
+    ]
+  }
+}
+```
+
+**AI 用途**：
+- 压缩器/限制器测试：输入恒定白噪声，对比处理前后的 `dynamic_range_db` 和 `crest_factor_db`
+- Attack/Release 时间测量：输入脉冲信号，读取 `attack_time_ms` 和 `release_time_ms`
+- 音量包络可视化：`envelope` 数组提供完整的 RMS/Peak 时序数据
+- 门控效果检测：观察包络中是否有突然的静音段
+
+---
+
 ## 输出格式
 
 ### 批处理输出结构
 
 ```json
 {
-  "version": "1.0",
+  "version": "1.1",
   "total_commands": 5,
   "results": [
     {
@@ -858,7 +1013,38 @@ AI Agent 应只解析 stdout 的 JSON，忽略 stderr。
 
 **AI 应检查**：比较两张截图差异，验证 UI 响应参数变化；检查组件树中是否有预期的控件。
 
-### 示例 5：MIDI 和弦与 CC 自动化
+### 示例 5：压缩器效果验证（v1.1 Loudness 分析）
+
+```json
+[
+  {"action": "load_plugin", "plugin_path": "MyCompressor.vst3"},
+  {"action": "generate_and_process", "signal_type": "noise", "duration_ms": 2000, "amplitude": 0.9},
+  {"action": "analyze_loudness", "window_ms": 5.0, "hop_ms": 2.0, "include_envelope": true},
+  {"action": "analyze_stft", "fft_order": 11, "hop_size": 256}
+]
+```
+
+**AI 应检查**：
+- `dynamic_range_db` 应明显小于未压缩信号（白噪声约 0 dB 动态范围）
+- `crest_factor_db` 较低说明压缩效果明显
+- STFT 的 `energy_low/mid/high_db` 可判断压缩器是否改变了频谱平衡
+
+### 示例 6：插件延迟精确测量（v1.1 时域分析）
+
+```json
+[
+  {"action": "load_plugin", "plugin_path": "MyPlugin.vst3"},
+  {"action": "generate_and_process", "signal_type": "impulse", "duration_ms": 100},
+  {"action": "analyze_time_domain", "include_samples": true, "max_samples": 5000}
+]
+```
+
+**AI 应检查**：
+- `first_nonzero_sample` 和 `latency_ms` 直接给出处理延迟
+- `samples` 原始数据可用于冲激响应特征分析
+- `zero_crossing_rate` 可辅助判断输出信号的频率特征
+
+### 示例 7：MIDI 和弦与 CC 自动化
 
 ```json
 [
@@ -895,7 +1081,7 @@ Plugin_host/
 │   ├── PluginHost.h/cpp        # 核心：插件加载/卸载/处理/MIDI/生命周期
 │   ├── BatchProcessor.h/cpp    # JSON 命令分发器
 │   ├── SignalGenerator.h/cpp   # 多源测试信号生成
-│   ├── AudioAnalyzer.h/cpp     # FFT + RMS/Peak 分析
+│   ├── AudioAnalyzer.h/cpp     # FFT + RMS/Peak + STFT + TimeDomain + Loudness 分析
 │   ├── OffscreenRenderer.h/cpp # UI 截图 (X11 XGetImage) + 组件树
 │   └── JsonHelper.h            # JSON 序列化工具
 │
@@ -925,7 +1111,7 @@ Plugin_host/
 
 - **已完整测试验证**（MSVC 2019 / CMake 3.22+），所有功能正常
 - 直接运行 `.exe`，不需要虚拟显示服务器
-- UI 截图通过 JUCE 的 `createComponentSnapshot()` 实现，效果良好
+- UI 截图通过 Win32 `PrintWindow` API 捕获实际窗口内容（含原生子窗口），效果良好
 - 崩溃信号处理支持 SIGSEGV / SIGABRT / SIGFPE（Windows 无 SIGBUS）
 - 插件路径支持正斜杠 `/` 和反斜杠 `\`，JSON 中推荐用正斜杠或双反斜杠
 - 构建推荐使用 Visual Studio 生成器，也支持 Ninja
@@ -952,7 +1138,6 @@ Plugin_host/
 - 同一时刻只能加载一个插件实例
 - UI 截图在 Linux 上需要约 400ms 延迟等待 X 服务器渲染
 - 仅支持 VST3 格式（不支持 AU / LV2 / VST2）
-- Windows 上的截图生成的是通过 JUCE 软件渲染器捕获的图像，可能与插件使用 GPU 加速时的实际显示略有差异
 
 ---
 
@@ -976,3 +1161,6 @@ Plugin_host/
 | `send_midi_and_process` | MIDI 序列处理 | ✅ | — |
 | `test_plugin_lifecycle` | 加载/卸载压测 | — | — |
 | `test_editor_lifecycle` | 编辑器开关压测 | ✅ | — |
+| `analyze_stft` | STFT 时频分析 | ✅ (先 process) | — |
+| `analyze_time_domain` | 时域信号分析 | ✅ (先 process) | — |
+| `analyze_loudness` | 音量包络分析 | ✅ (先 process) | — |

@@ -184,3 +184,410 @@ juce::var AudioAnalyzer::toJson (const AnalysisResult& result, bool includeFullS
     set (root, "fft", fftObj);
     return root;
 }
+
+// ============================================================================
+// STFT — Short-Time Fourier Transform (v1.1)
+// ============================================================================
+AudioAnalyzer::STFTResult AudioAnalyzer::performSTFT (const juce::AudioBuffer<float>& buffer,
+                                                      double sampleRate,
+                                                      int fftOrder, int hopSize,
+                                                      int channel)
+{
+    STFTResult result;
+    const int fftSize = 1 << fftOrder;
+    result.fftSize = fftSize;
+    result.hopSize = hopSize;
+    result.numBins = fftSize / 2 + 1;
+    result.frequencyResolution = static_cast<float> (sampleRate / fftSize);
+    result.timeResolution      = static_cast<float> (hopSize / sampleRate);
+
+    if (buffer.getNumSamples() == 0 || channel >= buffer.getNumChannels())
+        return result;
+
+    const float* data = buffer.getReadPointer (channel);
+    const int numSamples = buffer.getNumSamples();
+
+    // Create windowing function
+    juce::dsp::WindowingFunction<float> window (static_cast<size_t> (fftSize),
+                                                juce::dsp::WindowingFunction<float>::hann);
+    juce::dsp::FFT fft (fftOrder);
+
+    // Accumulate band energies
+    double energyLow  = 0.0, energyMid  = 0.0, energyHigh = 0.0;
+    int    countLow   = 0,   countMid   = 0,   countHigh  = 0;
+
+    for (int frameStart = 0; frameStart + fftSize <= numSamples; frameStart += hopSize)
+    {
+        STFTFrame frame;
+        frame.timeSec = static_cast<float> ((frameStart + fftSize / 2) / sampleRate);
+
+        // Copy and window
+        std::vector<float> fftData (static_cast<size_t> (fftSize * 2), 0.0f);
+        std::copy (data + frameStart, data + frameStart + fftSize, fftData.begin());
+        window.multiplyWithWindowingTable (fftData.data(), static_cast<size_t> (fftSize));
+
+        // FFT
+        fft.performFrequencyOnlyForwardTransform (fftData.data());
+
+        // Extract magnitude in dB
+        frame.magnitudeDB.resize (static_cast<size_t> (result.numBins));
+        for (int i = 0; i < result.numBins; ++i)
+        {
+            float mag = fftData[static_cast<size_t> (i)] / static_cast<float> (fftSize);
+            float db = mag > 1.0e-10f ? 20.0f * std::log10 (mag) : -200.0f;
+            frame.magnitudeDB[static_cast<size_t> (i)] = db;
+
+            // Accumulate band energy (linear power)
+            if (mag > 1.0e-10f)
+            {
+                float freq = i * result.frequencyResolution;
+                double power = static_cast<double> (mag) * mag;
+                if (freq >= 20.0f && freq < 300.0f)       { energyLow  += power; ++countLow; }
+                else if (freq >= 300.0f && freq < 4000.0f) { energyMid  += power; ++countMid; }
+                else if (freq >= 4000.0f)                  { energyHigh += power; ++countHigh; }
+            }
+        }
+
+        result.frames.push_back (std::move (frame));
+    }
+
+    result.numFrames = static_cast<int> (result.frames.size());
+
+    // Compute band energy summaries
+    if (countLow > 0)
+        result.energyLowDB  = static_cast<float> (10.0 * std::log10 (energyLow / countLow));
+    if (countMid > 0)
+        result.energyMidDB  = static_cast<float> (10.0 * std::log10 (energyMid / countMid));
+    if (countHigh > 0)
+        result.energyHighDB = static_cast<float> (10.0 * std::log10 (energyHigh / countHigh));
+
+    return result;
+}
+
+// ============================================================================
+juce::var AudioAnalyzer::stftToJson (const STFTResult& result,
+                                     bool includeFullSpectrogram,
+                                     int maxFrames)
+{
+    using namespace JsonHelper;
+
+    auto root = makeObject();
+    set (root, "fft_size",              result.fftSize);
+    set (root, "hop_size",              result.hopSize);
+    set (root, "num_frames",            result.numFrames);
+    set (root, "num_bins",              result.numBins);
+    set (root, "frequency_resolution",  result.frequencyResolution);
+    set (root, "time_resolution_sec",   result.timeResolution);
+    set (root, "energy_low_db",         result.energyLowDB);
+    set (root, "energy_mid_db",         result.energyMidDB);
+    set (root, "energy_high_db",        result.energyHighDB);
+
+    // Per-frame summary (always included: time + max magnitude)
+    auto summaryArr = makeArray();
+    // Downsample frames if too many
+    int step = std::max (1, result.numFrames / maxFrames);
+    for (int i = 0; i < result.numFrames; i += step)
+    {
+        const auto& frame = result.frames[static_cast<size_t> (i)];
+        auto fObj = makeObject();
+        set (fObj, "time_sec", frame.timeSec);
+
+        // Max magnitude in this frame
+        float maxMag = -200.0f;
+        float maxFreq = 0.0f;
+        for (int b = 1; b < result.numBins; ++b)
+        {
+            if (frame.magnitudeDB[static_cast<size_t> (b)] > maxMag)
+            {
+                maxMag = frame.magnitudeDB[static_cast<size_t> (b)];
+                maxFreq = b * result.frequencyResolution;
+            }
+        }
+        set (fObj, "peak_magnitude_db", maxMag);
+        set (fObj, "peak_frequency_hz", maxFreq);
+        append (summaryArr, fObj);
+    }
+    set (root, "frame_summary", summaryArr);
+
+    // Full spectrogram (optional, can be very large)
+    if (includeFullSpectrogram)
+    {
+        auto spectrogramArr = makeArray();
+        for (int i = 0; i < result.numFrames; i += step)
+        {
+            const auto& frame = result.frames[static_cast<size_t> (i)];
+            auto binArr = makeArray();
+            for (auto v : frame.magnitudeDB)
+                append (binArr, v);
+            append (spectrogramArr, binArr);
+        }
+        set (root, "spectrogram_db", spectrogramArr);
+    }
+
+    return root;
+}
+
+// ============================================================================
+// Time-domain analysis (v1.1)
+// ============================================================================
+AudioAnalyzer::TimeDomainResult AudioAnalyzer::analyzeTimeDomain (
+    const juce::AudioBuffer<float>& buffer,
+    double sampleRate,
+    int maxSamplesPerChannel)
+{
+    TimeDomainResult result;
+    const int numChannels = buffer.getNumChannels();
+    const int numSamples  = buffer.getNumSamples();
+
+    result.numSamples  = numSamples;
+    result.numChannels = numChannels;
+    result.sampleRate  = sampleRate;
+    result.durationMs  = static_cast<float> (numSamples / sampleRate * 1000.0);
+
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        const float* data = buffer.getReadPointer (ch);
+
+        // Channel stats
+        result.channelStats.push_back (analyzeChannel (data, numSamples));
+
+        // Zero-crossing rate
+        int crossings = 0;
+        for (int i = 1; i < numSamples; ++i)
+        {
+            if ((data[i] >= 0.0f && data[i - 1] < 0.0f) ||
+                (data[i] < 0.0f && data[i - 1] >= 0.0f))
+                ++crossings;
+        }
+        float zcr = numSamples > 1
+            ? static_cast<float> (crossings) / static_cast<float> (numSamples - 1)
+            : 0.0f;
+        result.zeroCrossingRates.push_back (zcr);
+
+        // First non-zero sample (latency detection)
+        int firstNZ = -1;
+        for (int i = 0; i < numSamples; ++i)
+        {
+            if (std::fabs (data[i]) > 1.0e-7f)
+            {
+                firstNZ = i;
+                break;
+            }
+        }
+        result.firstNonZeroSample.push_back (firstNZ);
+
+        // Downsample for JSON output
+        std::vector<float> samples;
+        if (numSamples <= maxSamplesPerChannel)
+        {
+            samples.assign (data, data + numSamples);
+        }
+        else
+        {
+            // Pick evenly spaced samples
+            samples.reserve (static_cast<size_t> (maxSamplesPerChannel));
+            for (int i = 0; i < maxSamplesPerChannel; ++i)
+            {
+                int idx = static_cast<int> (
+                    static_cast<double> (i) * (numSamples - 1) / (maxSamplesPerChannel - 1));
+                samples.push_back (data[idx]);
+            }
+        }
+        result.channelSamples.push_back (std::move (samples));
+    }
+
+    return result;
+}
+
+// ============================================================================
+juce::var AudioAnalyzer::timeDomainToJson (const TimeDomainResult& result,
+                                            bool includeSamples)
+{
+    using namespace JsonHelper;
+
+    auto root = makeObject();
+    set (root, "num_samples",  result.numSamples);
+    set (root, "num_channels", result.numChannels);
+    set (root, "sample_rate",  result.sampleRate);
+    set (root, "duration_ms",  result.durationMs);
+
+    auto channelsArr = makeArray();
+    for (int ch = 0; ch < result.numChannels; ++ch)
+    {
+        auto chObj = makeObject();
+        set (chObj, "channel", ch);
+
+        // Stats
+        const auto& stats = result.channelStats[static_cast<size_t> (ch)];
+        set (chObj, "rms_db",       stats.rmsDB);
+        set (chObj, "peak_db",      stats.peakDB);
+        set (chObj, "dc_offset",    stats.dcOffset);
+        set (chObj, "has_nan",      stats.hasNaN);
+        set (chObj, "has_inf",      stats.hasInf);
+
+        set (chObj, "zero_crossing_rate", result.zeroCrossingRates[static_cast<size_t> (ch)]);
+        set (chObj, "first_nonzero_sample", result.firstNonZeroSample[static_cast<size_t> (ch)]);
+
+        if (result.firstNonZeroSample[static_cast<size_t> (ch)] >= 0)
+        {
+            float latencyMs = static_cast<float> (
+                result.firstNonZeroSample[static_cast<size_t> (ch)] / result.sampleRate * 1000.0);
+            set (chObj, "latency_ms", latencyMs);
+        }
+
+        // Sample data
+        if (includeSamples)
+        {
+            auto samplesArr = makeArray();
+            for (auto v : result.channelSamples[static_cast<size_t> (ch)])
+                append (samplesArr, v);
+            set (chObj, "samples", samplesArr);
+            set (chObj, "samples_count",
+                 static_cast<int> (result.channelSamples[static_cast<size_t> (ch)].size()));
+        }
+
+        append (channelsArr, chObj);
+    }
+    set (root, "channels", channelsArr);
+
+    return root;
+}
+
+// ============================================================================
+// Loudness / Envelope analysis (v1.1)
+// ============================================================================
+AudioAnalyzer::LoudnessResult AudioAnalyzer::analyzeLoudness (
+    const juce::AudioBuffer<float>& buffer,
+    double sampleRate,
+    float windowMs, float hopMs,
+    int channel)
+{
+    LoudnessResult result;
+    result.windowMs = windowMs;
+    result.hopMs    = hopMs;
+
+    if (buffer.getNumSamples() == 0 || channel >= buffer.getNumChannels())
+        return result;
+
+    const float* data = buffer.getReadPointer (channel);
+    const int numSamples = buffer.getNumSamples();
+
+    const int windowSamples = static_cast<int> (sampleRate * windowMs / 1000.0);
+    const int hopSamples    = static_cast<int> (sampleRate * hopMs / 1000.0);
+
+    if (windowSamples <= 0 || hopSamples <= 0)
+        return result;
+
+    // Overall stats
+    auto overallStats = analyzeChannel (data, numSamples);
+    result.overallRmsDB  = overallStats.rmsDB;
+    result.overallPeakDB = overallStats.peakDB;
+    result.crestFactorDB = overallStats.peakDB - overallStats.rmsDB;
+
+    // Compute per-frame envelope
+    float minRmsDB = 0.0f;
+    float maxRmsDB = -200.0f;
+    float peakRmsDB = -200.0f;
+    int   peakFrameIdx = 0;
+
+    for (int start = 0; start + windowSamples <= numSamples; start += hopSamples)
+    {
+        EnvelopePoint pt;
+        pt.timeSec = static_cast<float> ((start + windowSamples / 2) / sampleRate);
+
+        // RMS in this window
+        double sumSq = 0.0;
+        float  peak  = 0.0f;
+        for (int i = start; i < start + windowSamples; ++i)
+        {
+            float s = data[i];
+            sumSq += static_cast<double> (s) * s;
+            float a = std::fabs (s);
+            if (a > peak) peak = a;
+        }
+        float rms = static_cast<float> (std::sqrt (sumSq / windowSamples));
+        pt.rmsDB  = rms > 1.0e-10f  ? 20.0f * std::log10 (rms)  : -120.0f;
+        pt.peakDB = peak > 1.0e-10f ? 20.0f * std::log10 (peak) : -120.0f;
+
+        if (pt.rmsDB > maxRmsDB)
+        {
+            maxRmsDB = pt.rmsDB;
+            peakFrameIdx = static_cast<int> (result.envelope.size());
+        }
+        if (pt.rmsDB < minRmsDB && pt.rmsDB > -119.0f)
+            minRmsDB = pt.rmsDB;
+
+        if (pt.rmsDB > peakRmsDB)
+            peakRmsDB = pt.rmsDB;
+
+        result.envelope.push_back (pt);
+    }
+
+    result.numFrames = static_cast<int> (result.envelope.size());
+    result.dynamicRangeDB = maxRmsDB - minRmsDB;
+
+    // Attack time: time from start to first frame reaching within -3dB of peak
+    float attackThreshold = peakRmsDB - 3.0f;
+    result.attackTimeMs = 0.0f;
+    for (int i = 0; i < result.numFrames; ++i)
+    {
+        if (result.envelope[static_cast<size_t> (i)].rmsDB >= attackThreshold)
+        {
+            result.attackTimeMs = result.envelope[static_cast<size_t> (i)].timeSec * 1000.0f;
+            break;
+        }
+    }
+
+    // Release time: time from peak frame to first frame dropping below peak - 20dB
+    float releaseThreshold = peakRmsDB - 20.0f;
+    result.releaseTimeMs = 0.0f;
+    for (int i = peakFrameIdx + 1; i < result.numFrames; ++i)
+    {
+        if (result.envelope[static_cast<size_t> (i)].rmsDB <= releaseThreshold)
+        {
+            result.releaseTimeMs =
+                (result.envelope[static_cast<size_t> (i)].timeSec
+                 - result.envelope[static_cast<size_t> (peakFrameIdx)].timeSec) * 1000.0f;
+            break;
+        }
+    }
+
+    return result;
+}
+
+// ============================================================================
+juce::var AudioAnalyzer::loudnessToJson (const LoudnessResult& result,
+                                          bool includeEnvelope,
+                                          int maxPoints)
+{
+    using namespace JsonHelper;
+
+    auto root = makeObject();
+    set (root, "num_frames",       result.numFrames);
+    set (root, "window_ms",        result.windowMs);
+    set (root, "hop_ms",           result.hopMs);
+    set (root, "overall_rms_db",   result.overallRmsDB);
+    set (root, "overall_peak_db",  result.overallPeakDB);
+    set (root, "dynamic_range_db", result.dynamicRangeDB);
+    set (root, "crest_factor_db",  result.crestFactorDB);
+    set (root, "attack_time_ms",   result.attackTimeMs);
+    set (root, "release_time_ms",  result.releaseTimeMs);
+
+    if (includeEnvelope && ! result.envelope.empty())
+    {
+        auto envArr = makeArray();
+        int step = std::max (1, result.numFrames / maxPoints);
+        for (int i = 0; i < result.numFrames; i += step)
+        {
+            const auto& pt = result.envelope[static_cast<size_t> (i)];
+            auto ptObj = makeObject();
+            set (ptObj, "time_sec", pt.timeSec);
+            set (ptObj, "rms_db",   pt.rmsDB);
+            set (ptObj, "peak_db",  pt.peakDB);
+            append (envArr, ptObj);
+        }
+        set (root, "envelope", envArr);
+    }
+
+    return root;
+}

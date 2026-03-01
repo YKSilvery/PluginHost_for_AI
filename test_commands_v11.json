@@ -1,0 +1,78 @@
+{
+  "commands": [
+    {
+      "action": "load_plugin",
+      "plugin_path": "build/TestGainPlugin_artefacts/Release/VST3/Test Gain Plugin.vst3",
+      "sample_rate": 44100,
+      "block_size": 512
+    },
+    {
+      "action": "generate_and_process",
+      "signal_type": "sine",
+      "frequency": 440.0,
+      "duration_ms": 500,
+      "amplitude": 0.8
+    },
+    {
+      "action": "analyze_stft",
+      "fft_order": 11,
+      "hop_size": 512,
+      "channel": 0,
+      "include_spectrogram": false,
+      "max_frames": 100
+    },
+    {
+      "action": "analyze_time_domain",
+      "include_samples": true,
+      "max_samples": 5000
+    },
+    {
+      "action": "analyze_loudness",
+      "window_ms": 10.0,
+      "hop_ms": 5.0,
+      "channel": 0,
+      "include_envelope": true,
+      "max_points": 200
+    },
+    {
+      "action": "unload_plugin"
+    },
+    {
+      "action": "load_plugin",
+      "plugin_path": "build/TestSynthPlugin_artefacts/Release/VST3/Test Synth Plugin.vst3",
+      "sample_rate": 44100,
+      "block_size": 512
+    },
+    {
+      "action": "render_synth_note",
+      "note": 60,
+      "velocity": 0.8,
+      "duration_ms": 500,
+      "release_ms": 100
+    },
+    {
+      "action": "analyze_stft",
+      "fft_order": 11,
+      "hop_size": 256,
+      "channel": 0,
+      "include_spectrogram": true,
+      "max_frames": 50
+    },
+    {
+      "action": "analyze_time_domain",
+      "include_samples": false,
+      "max_samples": 10000
+    },
+    {
+      "action": "analyze_loudness",
+      "window_ms": 20.0,
+      "hop_ms": 10.0,
+      "channel": 0,
+      "include_envelope": true,
+      "max_points": 100
+    },
+    {
+      "action": "unload_plugin"
+    }
+  ]
+}

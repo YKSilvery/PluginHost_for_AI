@@ -31,7 +31,7 @@ juce::var BatchProcessor::executeBatch (const juce::var& batchJson)
         auto errResult = makeError ("batch", "Expected a JSON object with a 'commands' array or a bare array");
         append (resultsArr, errResult);
         auto root = makeObject();
-        set (root, "version", "1.0");
+        set (root, "version", "1.1");
         set (root, "results", resultsArr);
         return root;
     }
@@ -47,7 +47,7 @@ juce::var BatchProcessor::executeBatch (const juce::var& batchJson)
     }
 
     auto root = makeObject();
-    set (root, "version", "1.0");
+    set (root, "version", "1.1");
     set (root, "total_commands", arr->size());
     set (root, "results", resultsArr);
     return root;
@@ -84,6 +84,9 @@ juce::var BatchProcessor::executeCommand (const juce::var& command, int index)
         if (action == "test_editor_lifecycle") return handleTestEditorLifecycle (command);
         if (action == "send_midi_and_process") return handleSendMidiAndProcess (command);
         if (action == "render_synth_note")    return handleRenderSynthNote (command);
+        if (action == "analyze_stft")         return handleAnalyzeSTFT (command);
+        if (action == "analyze_time_domain")  return handleAnalyzeTimeDomain (command);
+        if (action == "analyze_loudness")     return handleAnalyzeLoudness (command);
 
         return makeError (action, "Unknown action: " + action);
     }
@@ -392,4 +395,91 @@ juce::var BatchProcessor::handleRenderSynthNote (const juce::var& cmd)
     set (data, "analysis",         analysisJson);
 
     return makeSuccess ("render_synth_note", data);
+}
+
+// ============================================================================
+// v1.1: Advanced Analysis Commands
+// ============================================================================
+juce::var BatchProcessor::handleAnalyzeSTFT (const juce::var& cmd)
+{
+    using namespace JsonHelper;
+
+    if (lastOutputBuffer.getNumSamples() == 0)
+        return makeError ("analyze_stft", "No output buffer available — run generate_and_process first");
+
+    int fftOrder              = static_cast<int> (cmd.getProperty ("fft_order", 11));
+    int hopSize               = static_cast<int> (cmd.getProperty ("hop_size", 512));
+    int channel               = static_cast<int> (cmd.getProperty ("channel", 0));
+    bool includeSpectrogram   = static_cast<bool> (cmd.getProperty ("include_spectrogram", false));
+    int maxFrames             = static_cast<int> (cmd.getProperty ("max_frames", 200));
+
+    fftOrder  = juce::jlimit (8, 14, fftOrder);   // 256 .. 16384
+    channel   = juce::jlimit (0, lastOutputBuffer.getNumChannels() - 1, channel);
+    maxFrames = juce::jlimit (10, 10000, maxFrames);
+
+    auto result = AudioAnalyzer::performSTFT (lastOutputBuffer, lastSampleRate,
+                                              fftOrder, hopSize, channel);
+    auto resultJson = AudioAnalyzer::stftToJson (result, includeSpectrogram, maxFrames);
+
+    auto data = makeObject();
+    set (data, "num_samples",  lastOutputBuffer.getNumSamples());
+    set (data, "num_channels", lastOutputBuffer.getNumChannels());
+    set (data, "sample_rate",  lastSampleRate);
+    set (data, "channel",      channel);
+    set (data, "stft",         resultJson);
+
+    return makeSuccess ("analyze_stft", data);
+}
+
+// ============================================================================
+juce::var BatchProcessor::handleAnalyzeTimeDomain (const juce::var& cmd)
+{
+    using namespace JsonHelper;
+
+    if (lastOutputBuffer.getNumSamples() == 0)
+        return makeError ("analyze_time_domain",
+                          "No output buffer available — run generate_and_process first");
+
+    bool includeSamples       = static_cast<bool> (cmd.getProperty ("include_samples", true));
+    int maxSamplesPerChannel  = static_cast<int> (cmd.getProperty ("max_samples", 10000));
+
+    maxSamplesPerChannel = juce::jlimit (100, 1000000, maxSamplesPerChannel);
+
+    auto result = AudioAnalyzer::analyzeTimeDomain (lastOutputBuffer, lastSampleRate,
+                                                     maxSamplesPerChannel);
+    auto resultJson = AudioAnalyzer::timeDomainToJson (result, includeSamples);
+
+    return makeSuccess ("analyze_time_domain", resultJson);
+}
+
+// ============================================================================
+juce::var BatchProcessor::handleAnalyzeLoudness (const juce::var& cmd)
+{
+    using namespace JsonHelper;
+
+    if (lastOutputBuffer.getNumSamples() == 0)
+        return makeError ("analyze_loudness",
+                          "No output buffer available — run generate_and_process first");
+
+    float windowMs     = static_cast<float> (cmd.getProperty ("window_ms", 10.0));
+    float hopMs        = static_cast<float> (cmd.getProperty ("hop_ms", 5.0));
+    int channel        = static_cast<int> (cmd.getProperty ("channel", 0));
+    bool includeEnvelope = static_cast<bool> (cmd.getProperty ("include_envelope", true));
+    int maxPoints      = static_cast<int> (cmd.getProperty ("max_points", 500));
+
+    channel   = juce::jlimit (0, lastOutputBuffer.getNumChannels() - 1, channel);
+    maxPoints = juce::jlimit (10, 50000, maxPoints);
+
+    auto result = AudioAnalyzer::analyzeLoudness (lastOutputBuffer, lastSampleRate,
+                                                   windowMs, hopMs, channel);
+    auto resultJson = AudioAnalyzer::loudnessToJson (result, includeEnvelope, maxPoints);
+
+    auto data = makeObject();
+    set (data, "num_samples",  lastOutputBuffer.getNumSamples());
+    set (data, "num_channels", lastOutputBuffer.getNumChannels());
+    set (data, "sample_rate",  lastSampleRate);
+    set (data, "channel",      channel);
+    set (data, "loudness",     resultJson);
+
+    return makeSuccess ("analyze_loudness", data);
 }

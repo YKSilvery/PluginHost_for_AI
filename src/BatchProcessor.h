@@ -58,6 +58,11 @@ private:
     juce::var handleSendMidiAndProcess  (const juce::var& cmd);
     juce::var handleRenderSynthNote     (const juce::var& cmd);
 
+    // v1.1: Advanced analysis commands
+    juce::var handleAnalyzeSTFT         (const juce::var& cmd);
+    juce::var handleAnalyzeTimeDomain   (const juce::var& cmd);
+    juce::var handleAnalyzeLoudness     (const juce::var& cmd);
+
     PluginHost                 host;
     juce::AudioBuffer<float>   lastOutputBuffer;
     double                     lastSampleRate = 44100.0;

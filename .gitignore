@@ -1,0 +1,52 @@
+# Ignore CMake and build artifacts
+/build/
+/**/build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# JUCE / artefacts
+*_artefacts/
+
+# Visual Studio
+*.sln
+*.vcxproj*
+*.vcxproj.user
+*.suo
+*.user
+*.VC.db
+ipch/
+*.pdb
+
+# VS Code
+.vscode/
+
+# Xcode
+*.xcworkspace/
+*.xcodeproj/
+
+# Python
+__pycache__/
+*.pyc
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Temporary / logs
+*.log
+*.tmp
+
+# Binaries
+*.exe
+*.dll
+*.lib
+*.so
+*.dylib
+*.app
+
+# Virtualenvs
+venv/
+env/
