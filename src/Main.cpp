@@ -20,6 +20,10 @@
 #include <cstring>
 #include <signal.h>
 
+#if !defined(_WIN32)
+ #include <unistd.h>
+#endif
+
 // Windows compatibility
 #if defined(_WIN32)
  #include <io.h>       // _write
