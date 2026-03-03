@@ -63,6 +63,17 @@ private:
     juce::var handleAnalyzeTimeDomain   (const juce::var& cmd);
     juce::var handleAnalyzeLoudness     (const juce::var& cmd);
 
+    // v1.2: Multi-bus I/O
+    juce::var handleGetBusLayout        (const juce::var& cmd);
+    juce::var handleConfigureBuses      (const juce::var& cmd);
+    juce::var handleProcessMultiBus     (const juce::var& cmd);
+    juce::var handleProcessAudioWithMidi(const juce::var& cmd);
+
+    // v1.2: UI Interaction
+    juce::var handleSimulateClick       (const juce::var& cmd);
+    juce::var handleSimulateDrag        (const juce::var& cmd);
+    juce::var handleSimulateMouseWheel  (const juce::var& cmd);
+
     PluginHost                 host;
     juce::AudioBuffer<float>   lastOutputBuffer;
     double                     lastSampleRate = 44100.0;

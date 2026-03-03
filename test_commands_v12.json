@@ -1,0 +1,144 @@
+{
+  "commands": [
+    {
+      "action": "load_plugin",
+      "plugin_path": "build/TestGainPlugin_artefacts/Release/VST3/Test Gain Plugin.vst3",
+      "sample_rate": 44100,
+      "block_size": 512
+    },
+
+    {
+      "action": "get_bus_layout"
+    },
+
+    {
+      "action": "generate_and_process",
+      "signal_type": "sine",
+      "frequency": 440.0,
+      "duration_ms": 200,
+      "amplitude": 0.8
+    },
+
+    {
+      "action": "process_audio_with_midi",
+      "signal_type": "sine",
+      "frequency": 1000.0,
+      "duration_ms": 200,
+      "amplitude": 0.5,
+      "midi_events": [
+        {"type": "cc", "cc_number": 1, "cc_value": 64, "time_ms": 0},
+        {"type": "cc", "cc_number": 1, "cc_value": 127, "time_ms": 100}
+      ]
+    },
+
+    {
+      "action": "process_multi_bus",
+      "duration_ms": 200,
+      "buses": [
+        {
+          "bus_index": 0,
+          "signal_type": "sine",
+          "frequency": 440.0,
+          "duration_ms": 200,
+          "amplitude": 0.7
+        }
+      ]
+    },
+
+    {
+      "action": "open_editor"
+    },
+
+    {
+      "action": "get_parameter_layout"
+    },
+
+    {
+      "action": "simulate_click",
+      "x": 100,
+      "y": 200,
+      "num_clicks": 1,
+      "button": "left"
+    },
+
+    {
+      "action": "simulate_drag",
+      "start_x": 100,
+      "start_y": 250,
+      "end_x": 100,
+      "end_y": 150,
+      "steps": 10,
+      "duration_ms": 100
+    },
+
+    {
+      "action": "simulate_mouse_wheel",
+      "x": 100,
+      "y": 200,
+      "delta_x": 0.0,
+      "delta_y": 0.5
+    },
+
+    {
+      "action": "get_parameter",
+      "parameter_id": "gain"
+    },
+
+    {
+      "action": "close_editor"
+    },
+
+    {
+      "action": "unload_plugin"
+    },
+
+    {
+      "action": "load_plugin",
+      "plugin_path": "build/TestSynthPlugin_artefacts/Release/VST3/Test Synth Plugin.vst3",
+      "sample_rate": 44100,
+      "block_size": 512
+    },
+
+    {
+      "action": "get_bus_layout"
+    },
+
+    {
+      "action": "open_editor"
+    },
+
+    {
+      "action": "get_parameter_layout"
+    },
+
+    {
+      "action": "simulate_click",
+      "x": 200,
+      "y": 150,
+      "num_clicks": 1
+    },
+
+    {
+      "action": "simulate_drag",
+      "start_x": 80,
+      "start_y": 200,
+      "end_x": 80,
+      "end_y": 100,
+      "steps": 15,
+      "duration_ms": 150
+    },
+
+    {
+      "action": "get_parameter",
+      "parameter_id": "attack"
+    },
+
+    {
+      "action": "close_editor"
+    },
+
+    {
+      "action": "unload_plugin"
+    }
+  ]
+}

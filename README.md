@@ -18,6 +18,8 @@
   - [UI 截图与布局](#5-ui-截图与布局)
   - [生命周期压力测试](#6-生命周期压力测试)
   - [高级分析 (v1.1)](#7-高级分析-v11)
+  - [多轨道 I/O 与效果器 MIDI (v1.2)](#8-多轨道-io-与效果器-midi-v12)
+  - [UI 交互模拟 (v1.2)](#9-ui-交互模拟-v12)
 - [输出格式](#输出格式)
 - [信号类型一览](#信号类型一览)
 - [典型 AI 工作流示例](#典型-ai-工作流示例)
@@ -893,13 +895,239 @@ AI Agent 应只解析 stdout 的 JSON，忽略 stderr。
 
 ---
 
+### 8. 多轨道 I/O 与效果器 MIDI (v1.2)
+
+> 用于测试带 sidechain 输入的效果器，以及接受 MIDI 控制的效果器插件。
+
+#### `get_bus_layout` — 查询插件的总线布局
+
+```json
+{"action": "get_bus_layout"}
+```
+
+**返回数据**：
+
+```json
+{
+  "input_bus_count": 2,
+  "output_bus_count": 1,
+  "total_input_channels": 4,
+  "total_output_channels": 2,
+  "input_buses": [
+    {
+      "bus_index": 0,
+      "name": "Input",
+      "is_main": true,
+      "is_enabled": true,
+      "num_channels": 2,
+      "channel_offset": 0,
+      "default_layout": "Stereo",
+      "current_layout": "Stereo",
+      "is_enabled_by_default": true
+    },
+    {
+      "bus_index": 1,
+      "name": "Sidechain",
+      "is_main": false,
+      "is_enabled": true,
+      "num_channels": 2,
+      "channel_offset": 2,
+      "default_layout": "Stereo",
+      "current_layout": "Stereo",
+      "is_enabled_by_default": false
+    }
+  ],
+  "output_buses": [...]
+}
+```
+
+**AI 用途**：在调用 `process_multi_bus` 前先查询总线布局，了解哪些 bus 可用、each bus 的通道数和偏移量。
+
+---
+
+#### `configure_buses` — 启用/禁用总线
+
+```json
+{
+  "action": "configure_buses",
+  "buses": [
+    {"is_input": true, "bus_index": 1, "enabled": true}
+  ]
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `buses` | array | 总线配置数组 |
+| `buses[].is_input` | bool | true=输入总线, false=输出总线 |
+| `buses[].bus_index` | number | 总线索引 |
+| `buses[].enabled` | bool | 是否启用 |
+
+---
+
+#### `process_multi_bus` — 多总线处理（含可选 MIDI）
+
+```json
+{
+  "action": "process_multi_bus",
+  "duration_ms": 1000,
+  "buses": [
+    {
+      "bus_index": 0,
+      "signal_type": "sine",
+      "frequency": 440.0,
+      "duration_ms": 1000,
+      "amplitude": 0.8
+    },
+    {
+      "bus_index": 1,
+      "signal_type": "noise",
+      "amplitude": 0.5,
+      "duration_ms": 1000
+    }
+  ],
+  "midi_events": [
+    {"type": "cc", "cc_number": 1, "cc_value": 64, "time_ms": 0}
+  ]
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `duration_ms` | number | — | 总处理时长 (ms)，默认 1000 |
+| `buses` | array | ✅ | 每个输入总线的信号配置 |
+| `buses[].bus_index` | number | ✅ | 对应的输入总线索引 |
+| `buses[].*` | — | — | 信号参数同 `generate_and_process` |
+| `midi_events` | array | — | 可选 MIDI 事件，格式同 `send_midi_and_process` |
+
+未在 `buses` 中指定的总线将接收静音。
+
+---
+
+#### `process_audio_with_midi` — 效果器音频+MIDI 同时输入
+
+```json
+{
+  "action": "process_audio_with_midi",
+  "signal_type": "sine",
+  "frequency": 1000.0,
+  "duration_ms": 500,
+  "amplitude": 0.8,
+  "midi_events": [
+    {"type": "cc", "cc_number": 1, "cc_value": 64, "time_ms": 0},
+    {"type": "cc", "cc_number": 1, "cc_value": 127, "time_ms": 250}
+  ]
+}
+```
+
+简化版本，适用于单输入总线效果器。音频参数同 `generate_and_process`，MIDI 格式同 `send_midi_and_process`。
+
+---
+
+### 9. UI 交互模拟 (v1.2)
+
+> 通过 ComponentPeer 级别的合成鼠标事件操作插件 UI，可以控制不绑定 Parameter 的 UI 控件。
+> **前置条件**：必须先调用 `open_editor`。
+
+#### `simulate_click` — 模拟鼠标点击
+
+```json
+{
+  "action": "simulate_click",
+  "x": 100,
+  "y": 200,
+  "num_clicks": 1,
+  "button": "left"
+}
+```
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `x` | number | ✅ | 点击 X 坐标（编辑器坐标系） |
+| `y` | number | ✅ | 点击 Y 坐标 |
+| `num_clicks` | number | 1 | 点击次数（1=单击, 2=双击） |
+| `button` | string | "left" | "left" 或 "right" |
+
+**返回数据**：
+
+```json
+{
+  "x": 100,
+  "y": 200,
+  "num_clicks": 1,
+  "button": "left",
+  "target_name": "GainSlider",
+  "target_type": "juce::Slider"
+}
+```
+
+---
+
+#### `simulate_drag` — 模拟鼠标拖拽
+
+```json
+{
+  "action": "simulate_drag",
+  "start_x": 100,
+  "start_y": 250,
+  "end_x": 100,
+  "end_y": 150,
+  "steps": 20,
+  "duration_ms": 200
+}
+```
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `start_x`, `start_y` | number | ✅ | 拖拽起始坐标 |
+| `end_x`, `end_y` | number | ✅ | 拖拽终止坐标 |
+| `steps` | number | 20 | 中间插值点数（越多越平滑） |
+| `duration_ms` | number | 200 | 拖拽总时长 (ms) |
+
+**AI 用途**：拖动滑块、旋钮等 UI 控件。配合 `get_parameter_layout` 获取控件位置后使用。
+
+---
+
+#### `simulate_mouse_wheel` — 模拟鼠标滚轮
+
+```json
+{
+  "action": "simulate_mouse_wheel",
+  "x": 100,
+  "y": 200,
+  "delta_x": 0.0,
+  "delta_y": 0.5
+}
+```
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `x`, `y` | number | ✅ | 目标坐标 |
+| `delta_x` | number | 0.0 | 水平滚动量 |
+| `delta_y` | number | 0.5 | 垂直滚动量（正=向上） |
+
+**AI 用途**：微调旋钮/滑块值、滚动列表等。
+
+---
+
+#### UI 交互工作流建议
+
+1. `open_editor` → 打开 UI
+2. `get_parameter_layout` → 获取组件树和坐标
+3. `capture_ui` → 截图查看当前状态
+4. `simulate_click` / `simulate_drag` / `simulate_mouse_wheel` → 操作 UI
+5. `capture_ui` → 再次截图验证变化
+6. `get_parameter` → 检查参数是否因 UI 操作而改变
+
+---
+
 ## 输出格式
 
 ### 批处理输出结构
 
 ```json
 {
-  "version": "1.1",
+  "version": "1.2",
   "total_commands": 5,
   "results": [
     {
@@ -1065,6 +1293,60 @@ AI Agent 应只解析 stdout 的 JSON，忽略 stderr。
 
 **AI 应检查**：频谱中应有 C4(261Hz)、E4(330Hz)、G4(392Hz) 三个峰；CC7 淡出应导致后半段 RMS 降低。
 
+### 示例 8：Sidechain 压缩器测试（v1.2 多总线）
+
+```json
+[
+  {"action": "load_plugin", "plugin_path": "SidechainCompressor.vst3"},
+  {"action": "get_bus_layout"},
+  {"action": "configure_buses", "buses": [
+    {"is_input": true, "bus_index": 1, "enabled": true}
+  ]},
+  {"action": "process_multi_bus", "duration_ms": 2000, "buses": [
+    {"bus_index": 0, "signal_type": "sine", "frequency": 440, "amplitude": 0.8, "duration_ms": 2000},
+    {"bus_index": 1, "signal_type": "sine", "frequency": 2, "amplitude": 1.0, "duration_ms": 2000}
+  ]},
+  {"action": "analyze_loudness", "window_ms": 5.0, "hop_ms": 2.0},
+  {"action": "analyze_stft", "fft_order": 11}
+]
+```
+
+**AI 应检查**：音量包络应随 sidechain 信号（2Hz）呈周期性变化（"pumping" 效果）；`dynamic_range_db` 应明显大于无 sidechain 时。
+
+### 示例 9：通过 UI 拖拽控制非参数控件（v1.2 UI 模拟）
+
+```json
+[
+  {"action": "load_plugin", "plugin_path": "MyPlugin.vst3"},
+  {"action": "open_editor"},
+  {"action": "get_parameter_layout"},
+  {"action": "capture_ui", "output_path": "before.png"},
+  {"action": "simulate_drag", "start_x": 200, "start_y": 300, "end_x": 200, "end_y": 150, "steps": 20},
+  {"action": "capture_ui", "output_path": "after.png"},
+  {"action": "list_parameters"},
+  {"action": "close_editor"}
+]
+```
+
+**AI 应检查**：对比 before/after 截图确认 UI 控件已移动；检查 `list_parameters` 看参数值是否有变化（如果控件绑定参数）。
+
+### 示例 10：效果器 MIDI 控制测试（v1.2）
+
+```json
+[
+  {"action": "load_plugin", "plugin_path": "MidiControlledEffect.vst3"},
+  {"action": "process_audio_with_midi", "signal_type": "sine", "frequency": 440, "duration_ms": 1000, "amplitude": 0.8,
+    "midi_events": [
+      {"type": "cc", "cc_number": 1, "cc_value": 0, "time_ms": 0},
+      {"type": "cc", "cc_number": 1, "cc_value": 127, "time_ms": 500}
+    ]
+  },
+  {"action": "analyze_loudness", "window_ms": 10.0, "hop_ms": 5.0}
+]
+```
+
+**AI 应检查**：如果 CC1 控制效果深度，音量包络前半段应与后半段明显不同。
+
 ---
 
 ## 项目结构
@@ -1078,11 +1360,11 @@ Plugin_host/
 │
 ├── src/                        # 宿主源码
 │   ├── Main.cpp                # 入口：CLI 解析、崩溃处理、X11 初始化
-│   ├── PluginHost.h/cpp        # 核心：插件加载/卸载/处理/MIDI/生命周期
-│   ├── BatchProcessor.h/cpp    # JSON 命令分发器
+│   ├── PluginHost.h/cpp        # 核心：插件加载/卸载/处理/MIDI/生命周期/多总线/UI交互
+│   ├── BatchProcessor.h/cpp    # JSON 命令分发器（26 条命令）
 │   ├── SignalGenerator.h/cpp   # 多源测试信号生成
 │   ├── AudioAnalyzer.h/cpp     # FFT + RMS/Peak + STFT + TimeDomain + Loudness 分析
-│   ├── OffscreenRenderer.h/cpp # UI 截图 (X11 XGetImage) + 组件树
+│   ├── OffscreenRenderer.h/cpp # UI 截图 (X11/Win32) + 组件树
 │   └── JsonHelper.h            # JSON 序列化工具
 │
 ├── test_plugin/                # 测试效果器 (Gain + Tone + Mix)
@@ -1164,3 +1446,10 @@ Plugin_host/
 | `analyze_stft` | STFT 时频分析 | ✅ (先 process) | — |
 | `analyze_time_domain` | 时域信号分析 | ✅ (先 process) | — |
 | `analyze_loudness` | 音量包络分析 | ✅ (先 process) | — |
+| `get_bus_layout` | 查询总线布局 | ✅ | — |
+| `configure_buses` | 启用/禁用总线 | ✅ | — |
+| `process_multi_bus` | 多总线处理 | ✅ | — |
+| `process_audio_with_midi` | 效果器音频+MIDI | ✅ | — |
+| `simulate_click` | 模拟鼠标点击 | ✅ | ✅ |
+| `simulate_drag` | 模拟鼠标拖拽 | ✅ | ✅ |
+| `simulate_mouse_wheel` | 模拟鼠标滚轮 | ✅ | ✅ |

@@ -31,7 +31,7 @@ juce::var BatchProcessor::executeBatch (const juce::var& batchJson)
         auto errResult = makeError ("batch", "Expected a JSON object with a 'commands' array or a bare array");
         append (resultsArr, errResult);
         auto root = makeObject();
-        set (root, "version", "1.1");
+        set (root, "version", "1.2");
         set (root, "results", resultsArr);
         return root;
     }
@@ -47,7 +47,7 @@ juce::var BatchProcessor::executeBatch (const juce::var& batchJson)
     }
 
     auto root = makeObject();
-    set (root, "version", "1.1");
+    set (root, "version", "1.2");
     set (root, "total_commands", arr->size());
     set (root, "results", resultsArr);
     return root;
@@ -87,6 +87,13 @@ juce::var BatchProcessor::executeCommand (const juce::var& command, int index)
         if (action == "analyze_stft")         return handleAnalyzeSTFT (command);
         if (action == "analyze_time_domain")  return handleAnalyzeTimeDomain (command);
         if (action == "analyze_loudness")     return handleAnalyzeLoudness (command);
+        if (action == "get_bus_layout")       return handleGetBusLayout (command);
+        if (action == "configure_buses")      return handleConfigureBuses (command);
+        if (action == "process_multi_bus")    return handleProcessMultiBus (command);
+        if (action == "process_audio_with_midi") return handleProcessAudioWithMidi (command);
+        if (action == "simulate_click")       return handleSimulateClick (command);
+        if (action == "simulate_drag")        return handleSimulateDrag (command);
+        if (action == "simulate_mouse_wheel") return handleSimulateMouseWheel (command);
 
         return makeError (action, "Unknown action: " + action);
     }
@@ -482,4 +489,259 @@ juce::var BatchProcessor::handleAnalyzeLoudness (const juce::var& cmd)
     set (data, "loudness",     resultJson);
 
     return makeSuccess ("analyze_loudness", data);
+}
+
+// ============================================================================
+// v1.2: Multi-bus I/O
+// ============================================================================
+juce::var BatchProcessor::handleGetBusLayout (const juce::var& /*cmd*/)
+{
+    return host.getBusLayout();
+}
+
+// ============================================================================
+juce::var BatchProcessor::handleConfigureBuses (const juce::var& cmd)
+{
+    auto busesConfig = cmd.getProperty ("buses", juce::var());
+    return host.configureBuses (busesConfig);
+}
+
+// ============================================================================
+juce::var BatchProcessor::handleProcessMultiBus (const juce::var& cmd)
+{
+    using namespace JsonHelper;
+
+    if (! host.isPluginLoaded())
+        return makeError ("process_multi_bus", "No plugin loaded");
+
+    double sampleRate = host.getSampleRate();
+    double durationMs = static_cast<double> (cmd.getProperty ("duration_ms", 1000.0));
+    int totalSamples  = static_cast<int> (sampleRate * durationMs / 1000.0);
+
+    // Parse per-bus signal descriptions
+    auto busesVar = cmd.getProperty ("buses", juce::var());
+    std::vector<juce::AudioBuffer<float>> inputBuses;
+
+    if (busesVar.isArray())
+    {
+        auto* busArr = busesVar.getArray();
+        int inputBusCount = host.getPluginInstance()->getBusCount (true);
+
+        for (int busIdx = 0; busIdx < inputBusCount; ++busIdx)
+        {
+            auto* bus = host.getPluginInstance()->getBus (true, busIdx);
+            int busCh = (bus && bus->isEnabled()) ? bus->getNumberOfChannels() : 0;
+
+            if (busCh == 0)
+            {
+                inputBuses.push_back (juce::AudioBuffer<float>());
+                continue;
+            }
+
+            // Find matching bus config in JSON
+            juce::var busConfig;
+            for (int j = 0; j < busArr->size(); ++j)
+            {
+                auto& entry = busArr->getReference (j);
+                int idx = static_cast<int> (entry.getProperty ("bus_index", -1));
+                if (idx == busIdx)
+                {
+                    busConfig = entry;
+                    break;
+                }
+            }
+
+            if (busConfig.isVoid())
+            {
+                // No config for this bus → silence
+                inputBuses.push_back (juce::AudioBuffer<float> (busCh, totalSamples));
+                inputBuses.back().clear();
+            }
+            else
+            {
+                // Generate signal from this bus's config
+                auto buf = SignalGenerator::fromJson (busConfig, sampleRate, busCh);
+                if (buf.getNumSamples() == 0)
+                {
+                    buf = juce::AudioBuffer<float> (busCh, totalSamples);
+                    buf.clear();
+                }
+                inputBuses.push_back (std::move (buf));
+            }
+        }
+    }
+
+    // Parse MIDI events (optional)
+    juce::MidiBuffer midiBuffer;
+    auto eventsVar = cmd.getProperty ("midi_events", juce::var());
+    if (eventsVar.isArray())
+    {
+        auto* eventsArr = eventsVar.getArray();
+        for (int i = 0; i < eventsArr->size(); ++i)
+        {
+            auto& ev = eventsArr->getReference (i);
+            juce::String type  = ev.getProperty ("type", "note_on").toString().toLowerCase();
+            int channel        = static_cast<int> (ev.getProperty ("channel", 1));
+            int note           = static_cast<int> (ev.getProperty ("note", 60));
+            float vel          = static_cast<float> (ev.getProperty ("velocity", 0.8));
+            double timeMs      = static_cast<double> (ev.getProperty ("time_ms", 0.0));
+            int samplePos      = static_cast<int> (sampleRate * timeMs / 1000.0);
+            samplePos          = juce::jlimit (0, totalSamples - 1, samplePos);
+
+            juce::uint8 velByte = static_cast<juce::uint8> (juce::jlimit (0.0f, 1.0f, vel) * 127.0f);
+
+            if (type == "note_on")
+                midiBuffer.addEvent (juce::MidiMessage::noteOn (channel, note, velByte), samplePos);
+            else if (type == "note_off")
+                midiBuffer.addEvent (juce::MidiMessage::noteOff (channel, note, (juce::uint8) 0), samplePos);
+            else if (type == "cc" || type == "control_change")
+            {
+                int ccNum  = static_cast<int> (ev.getProperty ("cc_number", 1));
+                int ccVal  = static_cast<int> (ev.getProperty ("cc_value", 64));
+                midiBuffer.addEvent (juce::MidiMessage::controllerEvent (channel, ccNum, ccVal), samplePos);
+            }
+            else if (type == "pitch_bend")
+            {
+                int bendVal = static_cast<int> (ev.getProperty ("bend_value", 8192));
+                midiBuffer.addEvent (juce::MidiMessage::pitchWheel (channel, bendVal), samplePos);
+            }
+        }
+    }
+
+    lastOutputBuffer = host.processMultiBus (inputBuses, midiBuffer, totalSamples);
+    lastSampleRate   = sampleRate;
+
+    if (lastOutputBuffer.getNumSamples() == 0)
+        return makeError ("process_multi_bus", "Processing produced empty buffer");
+
+    auto analysis = AudioAnalyzer::analyze (lastOutputBuffer, sampleRate);
+    auto analysisJson = AudioAnalyzer::toJson (analysis, false);
+
+    auto data = makeObject();
+    set (data, "output_samples",    lastOutputBuffer.getNumSamples());
+    set (data, "output_channels",   lastOutputBuffer.getNumChannels());
+    set (data, "input_buses_used",  static_cast<int> (inputBuses.size()));
+    set (data, "midi_events_count", midiBuffer.getNumEvents());
+    set (data, "analysis",          analysisJson);
+
+    return makeSuccess ("process_multi_bus", data);
+}
+
+// ============================================================================
+juce::var BatchProcessor::handleProcessAudioWithMidi (const juce::var& cmd)
+{
+    using namespace JsonHelper;
+
+    if (! host.isPluginLoaded())
+        return makeError ("process_audio_with_midi", "No plugin loaded");
+
+    double sampleRate  = host.getSampleRate();
+    int numChannels    = std::max (host.getNumInputChannels(), host.getNumOutputChannels());
+    if (numChannels <= 0) numChannels = 2;
+
+    // Generate audio input
+    auto inputBuffer = SignalGenerator::fromJson (cmd, sampleRate, numChannels);
+    double durationMs = static_cast<double> (cmd.getProperty ("duration_ms", 1000.0));
+    int totalSamples  = inputBuffer.getNumSamples();
+    if (totalSamples == 0)
+        totalSamples = static_cast<int> (sampleRate * durationMs / 1000.0);
+
+    // Parse MIDI events
+    juce::MidiBuffer midiBuffer;
+    auto eventsVar = cmd.getProperty ("midi_events", juce::var());
+    if (eventsVar.isArray())
+    {
+        auto* eventsArr = eventsVar.getArray();
+        for (int i = 0; i < eventsArr->size(); ++i)
+        {
+            auto& ev = eventsArr->getReference (i);
+            juce::String type  = ev.getProperty ("type", "note_on").toString().toLowerCase();
+            int channel        = static_cast<int> (ev.getProperty ("channel", 1));
+            int note           = static_cast<int> (ev.getProperty ("note", 60));
+            float vel          = static_cast<float> (ev.getProperty ("velocity", 0.8));
+            double timeMs      = static_cast<double> (ev.getProperty ("time_ms", 0.0));
+            int samplePos      = static_cast<int> (sampleRate * timeMs / 1000.0);
+            samplePos          = juce::jlimit (0, totalSamples - 1, samplePos);
+
+            juce::uint8 velByte = static_cast<juce::uint8> (juce::jlimit (0.0f, 1.0f, vel) * 127.0f);
+
+            if (type == "note_on")
+                midiBuffer.addEvent (juce::MidiMessage::noteOn (channel, note, velByte), samplePos);
+            else if (type == "note_off")
+                midiBuffer.addEvent (juce::MidiMessage::noteOff (channel, note, (juce::uint8) 0), samplePos);
+            else if (type == "cc" || type == "control_change")
+            {
+                int ccNum  = static_cast<int> (ev.getProperty ("cc_number", 1));
+                int ccVal  = static_cast<int> (ev.getProperty ("cc_value", 64));
+                midiBuffer.addEvent (juce::MidiMessage::controllerEvent (channel, ccNum, ccVal), samplePos);
+            }
+            else if (type == "pitch_bend")
+            {
+                int bendVal = static_cast<int> (ev.getProperty ("bend_value", 8192));
+                midiBuffer.addEvent (juce::MidiMessage::pitchWheel (channel, bendVal), samplePos);
+            }
+        }
+    }
+
+    // Use processMultiBus with single input bus
+    std::vector<juce::AudioBuffer<float>> singleBus;
+    singleBus.push_back (std::move (inputBuffer));
+
+    lastOutputBuffer = host.processMultiBus (singleBus, midiBuffer, totalSamples);
+    lastSampleRate   = sampleRate;
+
+    if (lastOutputBuffer.getNumSamples() == 0)
+        return makeError ("process_audio_with_midi", "Processing produced empty buffer");
+
+    auto analysis = AudioAnalyzer::analyze (lastOutputBuffer, sampleRate);
+    auto analysisJson = AudioAnalyzer::toJson (analysis, false);
+
+    auto data = makeObject();
+    set (data, "input_samples",     totalSamples);
+    set (data, "output_samples",    lastOutputBuffer.getNumSamples());
+    set (data, "output_channels",   lastOutputBuffer.getNumChannels());
+    set (data, "midi_events_count", midiBuffer.getNumEvents());
+    set (data, "signal_type",       cmd.getProperty ("signal_type", "unknown"));
+    set (data, "analysis",          analysisJson);
+
+    return makeSuccess ("process_audio_with_midi", data);
+}
+
+// ============================================================================
+// v1.2: UI Interaction Simulation
+// ============================================================================
+juce::var BatchProcessor::handleSimulateClick (const juce::var& cmd)
+{
+    int x         = static_cast<int> (cmd.getProperty ("x", 0));
+    int y         = static_cast<int> (cmd.getProperty ("y", 0));
+    int numClicks = static_cast<int> (cmd.getProperty ("num_clicks", 1));
+    bool isRight  = cmd.getProperty ("button", "left").toString().toLowerCase() == "right";
+
+    numClicks = juce::jlimit (1, 5, numClicks);
+    return host.simulateClick (x, y, numClicks, isRight);
+}
+
+// ============================================================================
+juce::var BatchProcessor::handleSimulateDrag (const juce::var& cmd)
+{
+    int startX     = static_cast<int> (cmd.getProperty ("start_x", 0));
+    int startY     = static_cast<int> (cmd.getProperty ("start_y", 0));
+    int endX       = static_cast<int> (cmd.getProperty ("end_x", 0));
+    int endY       = static_cast<int> (cmd.getProperty ("end_y", 0));
+    int steps      = static_cast<int> (cmd.getProperty ("steps", 20));
+    float duration = static_cast<float> (cmd.getProperty ("duration_ms", 200.0));
+
+    steps = juce::jlimit (2, 200, steps);
+    return host.simulateDrag (startX, startY, endX, endY, steps, duration);
+}
+
+// ============================================================================
+juce::var BatchProcessor::handleSimulateMouseWheel (const juce::var& cmd)
+{
+    int x       = static_cast<int> (cmd.getProperty ("x", 0));
+    int y       = static_cast<int> (cmd.getProperty ("y", 0));
+    float dX    = static_cast<float> (cmd.getProperty ("delta_x", 0.0));
+    float dY    = static_cast<float> (cmd.getProperty ("delta_y", 0.5));
+
+    return host.simulateMouseWheel (x, y, dX, dY);
 }

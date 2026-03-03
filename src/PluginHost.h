@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_basics/juce_audio_basics.h>
+#include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_core/juce_core.h>
 
 /**
@@ -9,6 +10,7 @@
  *   load -> prepareToPlay -> processBlock(s) -> releaseResources -> unload
  *
  * Supports both effects (audio in -> audio out) and synths (MIDI in -> audio out).
+ * v1.2: Multi-bus I/O, audio+MIDI for effects, UI interaction simulation.
  */
 class PluginHost
 {
@@ -114,6 +116,64 @@ public:
      * Plugin must already be loaded. Tests for UI resource leaks and hangs.
      */
     juce::var testEditorLifecycle (int iterations, int delayBetweenMs = 50);
+
+    // =========================================================================
+    // v1.2: Multi-bus I/O
+    // =========================================================================
+
+    /**
+     * Get the full bus layout of the loaded plugin.
+     * Returns JSON with all input and output buses, their names, channel counts,
+     * enabled state, and whether they are the main bus.
+     */
+    juce::var getBusLayout() const;
+
+    /**
+     * Configure buses: enable/disable specific buses on the loaded plugin.
+     * @param config  JSON array of { "is_input": bool, "bus_index": int, "enabled": bool }
+     */
+    juce::var configureBuses (const juce::var& config);
+
+    /**
+     * Process audio with separate signal per input bus + optional MIDI.
+     * Each entry in inputBuses corresponds to one input bus (in order).
+     * If a bus entry has 0 samples, that bus receives silence.
+     * @param inputBuses  vector of audio buffers, one per enabled input bus
+     * @param midiEvents  MIDI events to inject during processing
+     * @param totalSamples number of samples to process (if 0, inferred from largest bus)
+     */
+    juce::AudioBuffer<float> processMultiBus (
+        const std::vector<juce::AudioBuffer<float>>& inputBuses,
+        const juce::MidiBuffer& midiEvents,
+        int totalSamples = 0);
+
+    // =========================================================================
+    // v1.2: UI Interaction Simulation
+    // =========================================================================
+
+    /**
+     * Simulate a mouse click at (x, y) on the plugin editor.
+     * Dispatches through the ComponentPeer for realistic event handling.
+     * @param x, y       position in editor coordinates
+     * @param numClicks  number of clicks (1 = single, 2 = double)
+     * @param isRight    true for right-click, false for left-click
+     */
+    juce::var simulateClick (int x, int y, int numClicks = 1, bool isRight = false);
+
+    /**
+     * Simulate a mouse drag from (startX, startY) to (endX, endY).
+     * Useful for moving sliders, knobs, etc.
+     * @param steps       number of intermediate points in the drag
+     * @param durationMs  total drag time (for realistic timing)
+     */
+    juce::var simulateDrag (int startX, int startY, int endX, int endY,
+                            int steps = 20, float durationMs = 200.0f);
+
+    /**
+     * Simulate a mouse wheel/scroll at (x, y).
+     * Useful for knobs and scrollable areas.
+     */
+    juce::var simulateMouseWheel (int x, int y, float deltaX, float deltaY);
 
     // =========================================================================
 

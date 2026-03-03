@@ -432,6 +432,371 @@ juce::var PluginHost::closeEditor()
 }
 
 // ============================================================================
+// v1.2: Multi-bus I/O
+// ============================================================================
+juce::var PluginHost::getBusLayout() const
+{
+    using namespace JsonHelper;
+
+    if (! pluginInstance)
+        return makeError ("get_bus_layout", "No plugin loaded");
+
+    auto data = makeObject();
+
+    // Input buses
+    auto inputArr = makeArray();
+    int inputBusCount = pluginInstance->getBusCount (true);
+    int totalInCh = 0;
+    for (int i = 0; i < inputBusCount; ++i)
+    {
+        auto* bus = pluginInstance->getBus (true, i);
+        auto busObj = makeObject();
+        set (busObj, "bus_index",       i);
+        set (busObj, "name",            bus->getName());
+        set (busObj, "is_main",         bus->isMain());
+        set (busObj, "is_enabled",      bus->isEnabled());
+        set (busObj, "num_channels",    bus->getNumberOfChannels());
+        set (busObj, "channel_offset",  totalInCh);
+        set (busObj, "default_layout",  bus->getDefaultLayout().getDescription());
+        set (busObj, "current_layout",  bus->getCurrentLayout().getDescription());
+        set (busObj, "is_enabled_by_default", bus->isEnabledByDefault());
+        totalInCh += bus->getNumberOfChannels();
+        append (inputArr, busObj);
+    }
+
+    // Output buses
+    auto outputArr = makeArray();
+    int outputBusCount = pluginInstance->getBusCount (false);
+    int totalOutCh = 0;
+    for (int i = 0; i < outputBusCount; ++i)
+    {
+        auto* bus = pluginInstance->getBus (false, i);
+        auto busObj = makeObject();
+        set (busObj, "bus_index",       i);
+        set (busObj, "name",            bus->getName());
+        set (busObj, "is_main",         bus->isMain());
+        set (busObj, "is_enabled",      bus->isEnabled());
+        set (busObj, "num_channels",    bus->getNumberOfChannels());
+        set (busObj, "channel_offset",  totalOutCh);
+        set (busObj, "default_layout",  bus->getDefaultLayout().getDescription());
+        set (busObj, "current_layout",  bus->getCurrentLayout().getDescription());
+        set (busObj, "is_enabled_by_default", bus->isEnabledByDefault());
+        totalOutCh += bus->getNumberOfChannels();
+        append (outputArr, busObj);
+    }
+
+    set (data, "input_bus_count",       inputBusCount);
+    set (data, "output_bus_count",      outputBusCount);
+    set (data, "total_input_channels",  totalInCh);
+    set (data, "total_output_channels", totalOutCh);
+    set (data, "input_buses",           inputArr);
+    set (data, "output_buses",          outputArr);
+
+    return makeSuccess ("get_bus_layout", data);
+}
+
+// ============================================================================
+juce::var PluginHost::configureBuses (const juce::var& config)
+{
+    using namespace JsonHelper;
+
+    if (! pluginInstance)
+        return makeError ("configure_buses", "No plugin loaded");
+
+    if (! config.isArray())
+        return makeError ("configure_buses", "'buses' must be an array");
+
+    auto* arr = config.getArray();
+    auto resultsArr = makeArray();
+
+    for (int i = 0; i < arr->size(); ++i)
+    {
+        auto& entry = arr->getReference (i);
+        bool isInput   = static_cast<bool> (entry.getProperty ("is_input", true));
+        int busIndex   = static_cast<int> (entry.getProperty ("bus_index", 0));
+        bool enabled   = static_cast<bool> (entry.getProperty ("enabled", true));
+
+        auto* bus = pluginInstance->getBus (isInput, busIndex);
+        auto resultObj = makeObject();
+        set (resultObj, "is_input",  isInput);
+        set (resultObj, "bus_index", busIndex);
+
+        if (bus == nullptr)
+        {
+            set (resultObj, "success", false);
+            set (resultObj, "error",   "Bus not found");
+        }
+        else
+        {
+            bool ok = bus->enable (enabled);
+            set (resultObj, "success",      ok);
+            set (resultObj, "is_enabled",   bus->isEnabled());
+            set (resultObj, "num_channels", bus->getNumberOfChannels());
+        }
+        append (resultsArr, resultObj);
+    }
+
+    // Re-prepare after bus change
+    pluginInstance->prepareToPlay (currentSampleRate, currentBlockSize);
+
+    auto data = makeObject();
+    set (data, "results",               resultsArr);
+    set (data, "total_input_channels",  pluginInstance->getTotalNumInputChannels());
+    set (data, "total_output_channels", pluginInstance->getTotalNumOutputChannels());
+
+    return makeSuccess ("configure_buses", data);
+}
+
+// ============================================================================
+juce::AudioBuffer<float> PluginHost::processMultiBus (
+    const std::vector<juce::AudioBuffer<float>>& inputBuses,
+    const juce::MidiBuffer& midiEvents,
+    int totalSamples)
+{
+    if (! pluginInstance)
+        return {};
+
+    const int numInCh  = pluginInstance->getTotalNumInputChannels();
+    const int numOutCh = pluginInstance->getTotalNumOutputChannels();
+    const int maxCh    = std::max (numInCh, numOutCh);
+    const int blockSize = currentBlockSize;
+
+    // Determine total samples from the largest bus input, or use provided value
+    if (totalSamples <= 0)
+    {
+        for (auto& buf : inputBuses)
+            totalSamples = std::max (totalSamples, buf.getNumSamples());
+    }
+    if (totalSamples <= 0)
+        return {};
+
+    // Build a flat interleaved input buffer matching the plugin's total input channels
+    juce::AudioBuffer<float> flatInput (maxCh, totalSamples);
+    flatInput.clear();
+
+    // Map each input bus to its channel offset in the flat buffer
+    int channelOffset = 0;
+    int inputBusCount = pluginInstance->getBusCount (true);
+    for (int busIdx = 0; busIdx < inputBusCount; ++busIdx)
+    {
+        auto* bus = pluginInstance->getBus (true, busIdx);
+        if (bus == nullptr || ! bus->isEnabled())
+            continue;
+
+        int busCh = bus->getNumberOfChannels();
+
+        if (busIdx < static_cast<int> (inputBuses.size()))
+        {
+            auto& srcBuf = inputBuses[static_cast<size_t> (busIdx)];
+            int chToCopy = std::min (busCh, srcBuf.getNumChannels());
+            int samplesToUse = std::min (totalSamples, srcBuf.getNumSamples());
+
+            for (int ch = 0; ch < chToCopy; ++ch)
+            {
+                if (channelOffset + ch < maxCh)
+                    flatInput.copyFrom (channelOffset + ch, 0, srcBuf, ch, 0, samplesToUse);
+            }
+        }
+        // else: bus gets silence (already cleared)
+
+        channelOffset += busCh;
+    }
+
+    // Process in blocks
+    juce::AudioBuffer<float> output (maxCh, totalSamples);
+    output.clear();
+
+    int samplePos = 0;
+    while (samplePos < totalSamples)
+    {
+        const int samplesThisBlock = std::min (blockSize, totalSamples - samplePos);
+
+        juce::AudioBuffer<float> blockBuffer (maxCh, samplesThisBlock);
+        blockBuffer.clear();
+
+        // Copy input channels into block
+        for (int ch = 0; ch < maxCh; ++ch)
+            blockBuffer.copyFrom (ch, 0, flatInput, ch, samplePos, samplesThisBlock);
+
+        // Extract MIDI events for this block
+        juce::MidiBuffer blockMidi;
+        for (const auto metadata : midiEvents)
+        {
+            int ts = metadata.samplePosition;
+            if (ts >= samplePos && ts < samplePos + samplesThisBlock)
+                blockMidi.addEvent (metadata.getMessage(), ts - samplePos);
+        }
+
+        pluginInstance->processBlock (blockBuffer, blockMidi);
+
+        for (int ch = 0; ch < maxCh; ++ch)
+            output.copyFrom (ch, samplePos, blockBuffer, ch, 0, samplesThisBlock);
+
+        samplePos += samplesThisBlock;
+    }
+
+    return output;
+}
+
+// ============================================================================
+// v1.2: UI Interaction Simulation
+// ============================================================================
+juce::var PluginHost::simulateClick (int x, int y, int numClicks, bool isRight)
+{
+    using namespace JsonHelper;
+
+    if (! activeEditor)
+        return makeError ("simulate_click", "No editor open — call open_editor first");
+
+    auto* peer = activeEditor->getPeer();
+    if (peer == nullptr)
+        return makeError ("simulate_click", "Editor has no peer (not on desktop)");
+
+    auto pos = juce::Point<float> (static_cast<float> (x), static_cast<float> (y));
+    auto mods = isRight ? juce::ModifierKeys::rightButtonModifier
+                        : juce::ModifierKeys::leftButtonModifier;
+
+    // Identify the component at the click point
+    auto* target = activeEditor->getComponentAt (x, y);
+    juce::String targetName = target ? target->getName() : "none";
+    juce::String targetType = target ? target->getComponentID() : "";
+    if (targetType.isEmpty() && target)
+        targetType = typeid (*target).name();
+
+    for (int click = 0; click < numClicks; ++click)
+    {
+        juce::int64 now = juce::Time::currentTimeMillis();
+
+        // Mouse down
+        peer->handleMouseEvent (juce::MouseInputSource::InputSourceType::mouse,
+                                pos, mods, 0.0f, 0.0f, now);
+
+        // Pump message loop briefly
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
+
+        // Mouse up
+        peer->handleMouseEvent (juce::MouseInputSource::InputSourceType::mouse,
+                                pos, juce::ModifierKeys(), 0.0f, 0.0f,
+                                juce::Time::currentTimeMillis());
+
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
+    }
+
+    // Allow UI to settle
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+
+    auto data = makeObject();
+    set (data, "x", x);
+    set (data, "y", y);
+    set (data, "num_clicks",    numClicks);
+    set (data, "button",        isRight ? "right" : "left");
+    set (data, "target_name",   targetName);
+    set (data, "target_type",   targetType);
+
+    return makeSuccess ("simulate_click", data);
+}
+
+// ============================================================================
+juce::var PluginHost::simulateDrag (int startX, int startY, int endX, int endY,
+                                    int steps, float durationMs)
+{
+    using namespace JsonHelper;
+
+    if (! activeEditor)
+        return makeError ("simulate_drag", "No editor open — call open_editor first");
+
+    auto* peer = activeEditor->getPeer();
+    if (peer == nullptr)
+        return makeError ("simulate_drag", "Editor has no peer (not on desktop)");
+
+    auto startPos = juce::Point<float> (static_cast<float> (startX),
+                                        static_cast<float> (startY));
+    auto endPos   = juce::Point<float> (static_cast<float> (endX),
+                                        static_cast<float> (endY));
+    auto mods     = juce::ModifierKeys::leftButtonModifier;
+
+    steps = std::max (steps, 2);
+    int delayPerStep = std::max (1, static_cast<int> (durationMs / steps));
+
+    // Identify the component at the start point
+    auto* target = activeEditor->getComponentAt (startX, startY);
+    juce::String targetName = target ? target->getName() : "none";
+
+    // Mouse down at start
+    peer->handleMouseEvent (juce::MouseInputSource::InputSourceType::mouse,
+                            startPos, mods, 0.0f, 0.0f,
+                            juce::Time::currentTimeMillis());
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (10);
+
+    // Interpolate through intermediate positions
+    for (int i = 1; i <= steps; ++i)
+    {
+        float t = static_cast<float> (i) / static_cast<float> (steps);
+        auto pos = startPos + (endPos - startPos) * t;
+
+        peer->handleMouseEvent (juce::MouseInputSource::InputSourceType::mouse,
+                                pos, mods, 0.0f, 0.0f,
+                                juce::Time::currentTimeMillis());
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (delayPerStep);
+    }
+
+    // Mouse up at end
+    peer->handleMouseEvent (juce::MouseInputSource::InputSourceType::mouse,
+                            endPos, juce::ModifierKeys(), 0.0f, 0.0f,
+                            juce::Time::currentTimeMillis());
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+
+    auto data = makeObject();
+    set (data, "start_x", startX);
+    set (data, "start_y", startY);
+    set (data, "end_x",   endX);
+    set (data, "end_y",   endY);
+    set (data, "steps",   steps);
+    set (data, "target_name", targetName);
+
+    return makeSuccess ("simulate_drag", data);
+}
+
+// ============================================================================
+juce::var PluginHost::simulateMouseWheel (int x, int y, float deltaX, float deltaY)
+{
+    using namespace JsonHelper;
+
+    if (! activeEditor)
+        return makeError ("simulate_mouse_wheel", "No editor open — call open_editor first");
+
+    auto* peer = activeEditor->getPeer();
+    if (peer == nullptr)
+        return makeError ("simulate_mouse_wheel", "Editor has no peer (not on desktop)");
+
+    auto pos = juce::Point<float> (static_cast<float> (x), static_cast<float> (y));
+
+    juce::MouseWheelDetails wheel;
+    wheel.deltaX = deltaX;
+    wheel.deltaY = deltaY;
+    wheel.isReversed = false;
+    wheel.isSmooth   = true;
+    wheel.isInertial = false;
+
+    auto* target = activeEditor->getComponentAt (x, y);
+    juce::String targetName = target ? target->getName() : "none";
+
+    peer->handleMouseWheel (juce::MouseInputSource::InputSourceType::mouse,
+                            pos, juce::Time::currentTimeMillis(), wheel);
+
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+
+    auto data = makeObject();
+    set (data, "x", x);
+    set (data, "y", y);
+    set (data, "delta_x", deltaX);
+    set (data, "delta_y", deltaY);
+    set (data, "target_name", targetName);
+
+    return makeSuccess ("simulate_mouse_wheel", data);
+}
+
+// ============================================================================
 // Lifecycle Stress Testing
 // ============================================================================
 juce::var PluginHost::testPluginLifecycle (const juce::String& path,
